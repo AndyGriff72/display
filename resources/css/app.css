@@ -381,3 +381,13 @@ code {
   box-sizing: border-box;
   margin: -16px 0 0;
 }
+
+.screen-link {
+  color: #8fb0ff;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.screen-link:hover {
+  text-decoration: underline;
+}

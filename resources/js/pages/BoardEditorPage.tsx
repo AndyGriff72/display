@@ -15,6 +15,7 @@ import {
   type CellType,
 } from "../board/layout";
 import { useBoardData } from "../board/useBoardData";
+import { usePaging } from "../board/usePaging";
 import { CHARSETS, type CharsetName } from "../cells/charsets";
 import { FONTS, loadFont } from "../fonts";
 import { SAMPLE_RECORDS, SAMPLES, type LayoutShape } from "./boardSamples";
@@ -64,6 +65,7 @@ export default function BoardEditorPage() {
   const shownId = useRef<number | undefined | null>(null);
   const [boardNotice, setBoardNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [screenSound, setScreenSound] = useState(false);
+  const screenKey = boards.find((b) => b.id === boardId)?.uuid;
   const [layoutText, setLayoutText] = useState(() => JSON.stringify(SAMPLES[0].layout, null, 2));
   const [shape, setShape] = useState<LayoutShape>(SAMPLES[0].layout);
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -72,7 +74,6 @@ export default function BoardEditorPage() {
   const [dataSources, setDataSources] = useState<SavedDataSource[]>([]);
   // The built-in sample records, typed text, or (when the layout names one) a saved data source.
   const [feed, setFeed] = useState<typeof BUILT_IN | typeof TYPED>(BUILT_IN);
-  const [page, setPage] = useState(0);
 
   const [cellType, setCellType] = useState<CellType>("splitflap");
   const [colour, setColour] = useState(DEFAULT_COLOURS.splitflap);
@@ -103,12 +104,7 @@ export default function BoardEditorPage() {
 
   // Move on a page every pageSeconds. Lists only move when they have more records than rows.
   const pageSeconds = typeof shape.pageSeconds === "number" ? shape.pageSeconds : DEFAULT_PAGE_SECONDS;
-  useEffect(() => {
-    setPage(0);
-    if (!(pageSeconds > 0)) return;
-    const timer = window.setInterval(() => setPage((p) => p + 1), pageSeconds * 1000);
-    return () => window.clearInterval(timer);
-  }, [pageSeconds, shape.dataSource, feed]);
+  const page = usePaging(shape.pageSeconds, (shape.dataSource ?? "") + "|" + feed);
 
   // Bound fields take their text from the records; the rest keep what was typed.
   const boardValues = useMemo(
@@ -339,6 +335,11 @@ export default function BoardEditorPage() {
           </button>
         )}
         <span className="hint">{savedSnapshot === null ? "Not saved yet" : dirty ? "Unsaved changes" : "Saved"}</span>
+        {screenKey && (
+          <a className="screen-link" href={"/screen/" + screenKey} target="_blank" rel="noreferrer" title="Screens show the board as last saved">
+            Open as a screen ↗
+          </a>
+        )}
       </div>
       {boardNotice && <p className={"notice board-notice " + boardNotice.kind}>{boardNotice.text}</p>}
 

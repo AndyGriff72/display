@@ -5,6 +5,7 @@ use App\Http\Controllers\BoardDataController;
 use App\Http\Controllers\ConnectionController;
 use App\Http\Controllers\DataSourceController;
 use App\Http\Controllers\SchemaController;
+use App\Http\Controllers\ScreenController;
 use App\Http\Middleware\LocalAdminOnly;
 use Illuminate\Support\Facades\Route;
 
@@ -33,8 +34,9 @@ Route::prefix('api')->group(function () {
         Route::delete('/boards/{board}', [BoardController::class, 'destroy']);
     });
 
-    // What screens fetch. Open, because screens do not sign in; addressed by an unguessable key.
+    // What screens fetch. Open, because screens do not sign in; addressed by unguessable keys.
     Route::get('/board-data/{uuid}', [BoardDataController::class, 'show']);
+    Route::get('/screens/{uuid}', [ScreenController::class, 'show']);
 
     // An API address that does not exist is a JSON 404, not the app's page.
     Route::any('/{any}', fn () => response()->json(['status' => 404, 'data' => null, 'message' => 'Not found.'], 404))
