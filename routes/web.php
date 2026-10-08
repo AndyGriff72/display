@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Controllers\BoardDataController;
 use App\Http\Controllers\ConnectionController;
+use App\Http\Controllers\DataSourceController;
+use App\Http\Controllers\SchemaController;
 use App\Http\Middleware\LocalAdminOnly;
 use Illuminate\Support\Facades\Route;
 
@@ -12,7 +15,19 @@ Route::prefix('api')->group(function () {
         Route::put('/connection', [ConnectionController::class, 'save']);
         Route::post('/connection/test', [ConnectionController::class, 'test']);
         Route::delete('/connection', [ConnectionController::class, 'destroy']);
+
+        Route::get('/schema/tables', [SchemaController::class, 'tables']);
+        Route::get('/schema/tables/{table}/columns', [SchemaController::class, 'columns']);
+
+        Route::get('/data-sources', [DataSourceController::class, 'index']);
+        Route::post('/data-sources/preview', [DataSourceController::class, 'preview']);
+        Route::post('/data-sources', [DataSourceController::class, 'store']);
+        Route::put('/data-sources/{dataSource}', [DataSourceController::class, 'update']);
+        Route::delete('/data-sources/{dataSource}', [DataSourceController::class, 'destroy']);
     });
+
+    // What screens fetch. Open, because screens do not sign in; addressed by an unguessable key.
+    Route::get('/board-data/{uuid}', [BoardDataController::class, 'show']);
 
     // An API address that does not exist is a JSON 404, not the app's page.
     Route::any('/{any}', fn () => response()->json(['status' => 404, 'data' => null, 'message' => 'Not found.'], 404))
