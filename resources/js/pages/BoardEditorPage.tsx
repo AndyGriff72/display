@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { deleteBoard, getBoard, listBoards, saveBoard, type BoardSummary } from "../api/boards";
+import { apiError } from "../api/client";
 import { listDataSources, type SavedDataSource } from "../api/dataSources";
 import { flapSound } from "../audio/flapSound";
 import { bindFields, templateColumns, type Row } from "../board/binding";
@@ -43,7 +46,24 @@ const TYPED = "__typed__";
 
 const playFlap = () => flapSound.play();
 
+/** What is compared to tell whether a board has unsaved changes. */
+const snapshot = (name: string, layout: BoardLayout) => JSON.stringify({ name, layout });
+
 export default function BoardEditorPage() {
+  const params = useParams();
+  const boardId = params.id ? Number(params.id) : undefined;
+  const navigate = useNavigate();
+  const [boards, setBoards] = useState<BoardSummary[]>([]);
+  const [name, setName] = useState("");
+  // The board as last saved or opened, to compare against; null for a board never saved.
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  // Set when a board has just been opened: its snapshot is taken once the controls show it.
+  const pendingSnapshot = useRef<string | null>(null);
+  // The board the editor already shows, so saving a new board does not reload it. Starts as
+  // "nothing yet", so the first render always opens whatever the address names.
+  const shownId = useRef<number | undefined | null>(null);
+  const [boardNotice, setBoardNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [screenSound, setScreenSound] = useState(false);
   const [layoutText, setLayoutText] = useState(() => JSON.stringify(SAMPLES[0].layout, null, 2));
   const [shape, setShape] = useState<LayoutShape>(SAMPLES[0].layout);
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -77,7 +97,9 @@ export default function BoardEditorPage() {
   const records: Row[] = shape.dataSource ? data.rows : feed === BUILT_IN ? SAMPLE_RECORDS : [];
   const usingData = !!shape.dataSource || feed === BUILT_IN;
   const fields = shape.fields ?? [];
-  const bound = (f: { text?: unknown }) => usingData && typeof f.text === "string";
+  // A field with text always shows it: its columns filled from the records when there are
+  // any, and any fixed text as it is. Only fields without text show what is typed below.
+  const bound = (f: { text?: unknown }) => typeof f.text === "string";
 
   // Move on a page every pageSeconds. Lists only move when they have more records than rows.
   const pageSeconds = typeof shape.pageSeconds === "number" ? shape.pageSeconds : DEFAULT_PAGE_SECONDS;
@@ -90,10 +112,9 @@ export default function BoardEditorPage() {
 
   // Bound fields take their text from the records; the rest keep what was typed.
   const boardValues = useMemo(
-    () =>
-      usingData ? { ...values, ...bindFields(fields.filter(bound), records, shape.pageFields ? page : undefined) } : values,
+    () => ({ ...values, ...bindFields(fields.filter(bound), records, shape.pageFields ? page : undefined) }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [shape, values, records, page, usingData]
+    [shape, values, records, page]
   );
 
   // Columns the templates use that the data does not have: almost always a typing mistake.
@@ -154,6 +175,122 @@ export default function BoardEditorPage() {
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
+  // Everything that is saved: the layout, its appearance and the screens' sound.
+  const fullLayout: BoardLayout = useMemo(
+    () => ({ ...layout, sound: { enabled: screenSound, volume } }),
+    [layout, screenSound, volume]
+  );
+  const current = snapshot(name.trim(), fullLayout);
+  const dirty = savedSnapshot === null || current !== savedSnapshot;
+
+  /** Show a layout in the editor: its structure in the JSON, its appearance in the controls. */
+  const applyLayout = (l: BoardLayout) => {
+    const { cell, sound, ...rest } = l;
+    replaceShape(rest);
+    setFeed(BUILT_IN);
+    setCellType(cell.type);
+    setColour(cell.color ?? DEFAULT_COLOURS[cell.type]);
+    setSegments(cell.segments ?? 14);
+    setCellWidth(cell.width);
+    setCellHeight(cell.height);
+    setFlipMs(cell.flipMs ?? 80);
+    setFontId(FONTS.find((f) => f.family === cell.fontFamily)?.id ?? FONTS[0].id);
+    setStackName((Object.keys(CHARSETS) as CharsetName[]).find((k) => CHARSETS[k] === cell.stack) ?? "standard");
+    setScreenSound(!!sound?.enabled);
+    setVolume(sound?.volume ?? 0.5);
+  };
+
+  const refreshBoards = () =>
+    listBoards()
+      .then(setBoards)
+      .catch(() => setBoards([]));
+  useEffect(() => {
+    refreshBoards();
+  }, []);
+
+  // Open the board in the address, or start a new one.
+  useEffect(() => {
+    if (boardId === shownId.current) return;
+    shownId.current = boardId;
+    setBoardNotice(null);
+    if (boardId === undefined) {
+      const sample = SAMPLES[0];
+      applyLayout({ ...sample.layout, cell: { type: "splitflap", width: sample.cellWidth, height: sample.cellHeight } });
+      setName("");
+      setSavedSnapshot(null);
+      return;
+    }
+    getBoard(boardId)
+      .then((board) => {
+        applyLayout(board.layout);
+        setName(board.name);
+        pendingSnapshot.current = board.name;
+      })
+      .catch((e) => setBoardNotice({ kind: "error", text: apiError(e).message }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardId]);
+
+  // Once an opened board is showing, remember it as saved.
+  useEffect(() => {
+    if (pendingSnapshot.current === null) return;
+    setSavedSnapshot(snapshot(pendingSnapshot.current.trim(), fullLayout));
+    pendingSnapshot.current = null;
+  }, [fullLayout]);
+
+  // Warn before leaving the page with unsaved changes.
+  useEffect(() => {
+    if (!dirty || savedSnapshot === null) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, savedSnapshot]);
+
+  const save = async (asNew: boolean) => {
+    let saveName = name.trim();
+    if (asNew) {
+      const answer = window.prompt("Name for the new board", saveName ? saveName + " (copy)" : "");
+      if (answer === null) return;
+      saveName = answer.trim();
+    }
+    if (!saveName) {
+      setBoardNotice({ kind: "error", text: "Give the board a name before saving it." });
+      return;
+    }
+    if (layoutErrors.length > 0 || jsonError) {
+      setBoardNotice({ kind: "error", text: "Fix the problems listed under the layout before saving." });
+      return;
+    }
+    try {
+      const res = await saveBoard(saveName, fullLayout, asNew ? undefined : boardId);
+      setName(res.data.name);
+      setSavedSnapshot(snapshot(res.data.name, fullLayout));
+      setBoardNotice({ kind: "ok", text: res.message });
+      refreshBoards();
+      if (res.data.id !== boardId) {
+        shownId.current = res.data.id;
+        navigate("/boards/" + res.data.id);
+      }
+    } catch (e) {
+      setBoardNotice({ kind: "error", text: apiError(e).message });
+    }
+  };
+
+  const remove = async () => {
+    if (boardId === undefined || !window.confirm('Delete "' + name + '"? Screens showing it will stop.')) return;
+    try {
+      await deleteBoard(boardId);
+      refreshBoards();
+      navigate("/");
+    } catch (e) {
+      setBoardNotice({ kind: "error", text: apiError(e).message });
+    }
+  };
+
+  const openBoard = (value: string) => {
+    if (dirty && savedSnapshot !== null && !window.confirm("Leave this board without saving your changes?")) return;
+    navigate(value ? "/boards/" + value : "/");
+  };
+
   // Keep the last layout that parsed on the board while the JSON is mid-edit.
   const editLayout = (text: string) => {
     setLayoutText(text);
@@ -182,6 +319,29 @@ export default function BoardEditorPage() {
 
   return (
     <main className="app">
+      <div className="board-bar">
+        <select value={boardId ?? ""} onChange={(e) => openBoard(e.target.value)} aria-label="Open a board">
+          <option value="">New board</option>
+          {boards.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Board name" aria-label="Board name" />
+        <button className="primary" onClick={() => save(false)}>
+          Save
+        </button>
+        <button onClick={() => save(true)}>Save as new…</button>
+        {boardId !== undefined && (
+          <button className="danger" onClick={remove}>
+            Delete
+          </button>
+        )}
+        <span className="hint">{savedSnapshot === null ? "Not saved yet" : dirty ? "Unsaved changes" : "Saved"}</span>
+      </div>
+      {boardNotice && <p className={"notice board-notice " + boardNotice.kind}>{boardNotice.text}</p>}
+
       <div className="board-wrap">
         <Board layout={layout} values={boardValues} records={records} page={page} onFlap={playFlap} showAreas={showAreas} />
       </div>
@@ -221,7 +381,11 @@ export default function BoardEditorPage() {
         )}
 
         <div className="buttons wide">
-          <button onClick={toggleSound}>{soundOn ? "Sound off" : "Sound on"}</button>
+          <button onClick={toggleSound}>{soundOn ? "Stop listening here" : "Listen here"}</button>
+          <label className="check">
+            <input type="checkbox" checked={screenSound} onChange={(e) => setScreenSound(e.target.checked)} />
+            Screens play the flap sound
+          </label>
           <label className="check">
             <input type="checkbox" checked={showAreas} onChange={(e) => setShowAreas(e.target.checked)} />
             Outline areas
@@ -231,6 +395,12 @@ export default function BoardEditorPage() {
         {fields.length > 0 && (
           <fieldset className="wide">
             <legend>Fields</legend>
+            {fields.some((f) => !bound(f)) && (
+              <p className="hint wide">
+                Text typed into these boxes is for trying the board out and is not saved. For text that is saved, give the
+                field a "text" in the layout: fixed words, or columns from the data in braces.
+              </p>
+            )}
             {fields.map((f) => {
               const rect = parseArea(f.area ?? "");
               const multiRow = !!rect && rect.y2 > rect.y1;

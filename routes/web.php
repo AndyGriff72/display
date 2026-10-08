@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardDataController;
 use App\Http\Controllers\ConnectionController;
 use App\Http\Controllers\DataSourceController;
@@ -24,6 +25,12 @@ Route::prefix('api')->group(function () {
         Route::post('/data-sources', [DataSourceController::class, 'store']);
         Route::put('/data-sources/{dataSource}', [DataSourceController::class, 'update']);
         Route::delete('/data-sources/{dataSource}', [DataSourceController::class, 'destroy']);
+
+        Route::get('/boards', [BoardController::class, 'index']);
+        Route::post('/boards', [BoardController::class, 'store']);
+        Route::get('/boards/{board}', [BoardController::class, 'show']);
+        Route::put('/boards/{board}', [BoardController::class, 'update']);
+        Route::delete('/boards/{board}', [BoardController::class, 'destroy']);
     });
 
     // What screens fetch. Open, because screens do not sign in; addressed by an unguessable key.

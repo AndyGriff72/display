@@ -112,6 +112,11 @@ export interface BoardLayout {
    * row 0). Off by default: a field reading row 0 is often deliberately "the next one".
    */
   pageFields?: boolean;
+  /**
+   * The flap sound on screens showing the board. Browsers only allow sound once someone has
+   * clicked or tapped the page, so a screen plays it from its first tap.
+   */
+  sound?: { enabled?: boolean; volume?: number };
   cell: CellSettings;
   statics?: StaticArea[];
   fields?: FieldArea[];
