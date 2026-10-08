@@ -49,8 +49,9 @@ export function Board({ layout, values, onFlap, showAreas }: BoardProps) {
           />
         );
       })}
-      {statics.map(({ id, rect }) => (
-        <div key={id} className="board-static" style={gridArea(rect)}>
+      {statics.map(({ id, rect, image, fit, padding, background }) => (
+        <div key={id} className="board-static" style={{ ...gridArea(rect), padding, background }}>
+          {image && <img className="board-static-image" src={image} alt="" style={{ objectFit: fit ?? "contain" }} />}
           {showAreas && <span className="board-area-label">{id}</span>}
         </div>
       ))}
@@ -64,10 +65,10 @@ export function Board({ layout, values, onFlap, showAreas }: BoardProps) {
 }
 
 /** Areas that can be drawn: ones that parse and fit on the board. validateLayout explains the rest. */
-function placedAreas(layout: BoardLayout, areas: { id: string; area: string }[]) {
+function placedAreas<A extends { area: string }>(layout: BoardLayout, areas: A[]) {
   return areas
-    .map((a) => ({ id: a.id, rect: parseArea(a.area) }))
-    .filter((a): a is { id: string; rect: Rect } => !!a.rect && a.rect.x2 < layout.columns && a.rect.y2 < layout.rows);
+    .map((a) => ({ ...a, rect: parseArea(a.area ?? "") }))
+    .filter((a): a is A & { rect: Rect } => !!a.rect && a.rect.x2 < layout.columns && a.rect.y2 < layout.rows);
 }
 
 function gridArea(r: Rect): CSSProperties {

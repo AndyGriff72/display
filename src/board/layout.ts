@@ -25,6 +25,18 @@ export interface CellSettings {
 export interface StaticArea {
   id: string;
   area: string;
+  /** A logo or other picture: any URL an <img> can load, including a data: URL. */
+  image?: string;
+  /**
+   * How the image fills the area. "contain" (the default) shows all of it, leaving
+   * background showing if the shapes differ; "cover" fills the area and crops the
+   * overflow; "fill" stretches it to fit.
+   */
+  fit?: "contain" | "cover" | "fill";
+  /** Space between the image and the area's edge, in pixels. */
+  padding?: number;
+  /** Any CSS colour. Defaults to the board's static panel colour. */
+  background?: string;
 }
 
 /** A named part of the board that data is written into, e.g. "destination" or "platform". */
@@ -49,6 +61,8 @@ export interface Rect {
   x2: number;
   y2: number;
 }
+
+const FITS: string[] = ["contain", "cover", "fill"];
 
 const COORD = /^\s*(\d+)\s*,\s*(\d+)\s*$/;
 
@@ -121,6 +135,9 @@ export function validateLayout(layout: BoardLayout): string[] {
   for (const s of layout.statics ?? []) {
     const rect = check("Static area", s.id, s.area);
     if (rect) statics.push({ id: s.id, rect });
+    if (s.fit !== undefined && !FITS.includes(s.fit)) {
+      errors.push(`Static area "${s.id}": fit must be one of ${FITS.map((f) => `"${f}"`).join(", ")}.`);
+    }
   }
   for (const f of layout.fields ?? []) {
     const rect = check("Field", f.id, f.area);

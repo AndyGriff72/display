@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160">
+  <!-- A plain train-front pictogram, drawn for this project as a stand-in logo. -->
+  <g fill="none" stroke="#f3efe2" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M30 20 h60 a14 14 0 0 1 14 14 v66 a14 14 0 0 1 -14 14 h-60 a14 14 0 0 1 -14 -14 v-66 a14 14 0 0 1 14 -14 z"/>
+    <path d="M28 40 h64 v26 h-64 z"/>
+    <path d="M42 114 l-18 30 M78 114 l18 30 M30 134 h60"/>
+  </g>
+  <circle cx="38" cy="90" r="6" fill="#f5c542"/>
+  <circle cx="82" cy="90" r="6" fill="#f5c542"/>
+</svg>

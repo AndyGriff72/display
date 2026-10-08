@@ -57,6 +57,14 @@ describe("validateLayout", () => {
     ).toEqual(['"dest" and "logo" overlap.']);
   });
 
+  it("reports an image fit it does not know", () => {
+    const errors = validateLayout({
+      ...base,
+      statics: [{ id: "logo", area: "0,0 to 3,1", image: "logo.svg", fit: "stretch" as "fill" }],
+    });
+    expect(errors).toEqual(['Static area "logo": fit must be one of "contain", "cover", "fill".']);
+  });
+
   it("reports overlapping static areas and duplicate ids", () => {
     const errors = validateLayout({
       ...base,

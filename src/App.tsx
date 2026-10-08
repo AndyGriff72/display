@@ -11,7 +11,7 @@ type LayoutShape = Omit<BoardLayout, "cell">;
 const SAMPLE_LAYOUT: LayoutShape = {
   columns: 24,
   rows: 4,
-  statics: [{ id: "logo", area: "0,0 to 3,3" }],
+  statics: [{ id: "logo", area: "0,0 to 3,3", image: "/sample-logo.svg", padding: 16, background: "#1f3a6b" }],
   fields: [
     { id: "time", area: "4,0 to 8,0" },
     { id: "destination", area: "10,0 to 23,0" },
