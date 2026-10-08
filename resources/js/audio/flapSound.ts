@@ -8,6 +8,8 @@
  * recorded sample can be swapped in with useSample().
  */
 
+import { synthesiseClickSamples } from "./clickSynth";
+
 const MIN_GAP_MS = 7;
 const VARIANTS = 6;
 
@@ -94,29 +96,11 @@ class FlapSound {
   }
 }
 
-/**
- * A short plastic clack: a burst of filtered noise for the impact, a quickly-damped
- * resonance for the flap itself and a low thump from the housing.
- */
+/** One variant of the flap's click (see clickSynth.ts), ready to play. */
 function synthesiseClick(ctx: AudioContext): AudioBuffer {
-  const rate = ctx.sampleRate;
-  const length = Math.floor(rate * 0.045);
-  const buffer = ctx.createBuffer(1, length, rate);
-  const data = buffer.getChannelData(0);
-
-  const ringHz = 1400 + Math.random() * 900;
-  const thumpHz = 110 + Math.random() * 60;
-  let smoothed = 0;
-
-  for (let i = 0; i < length; i++) {
-    const t = i / rate;
-    // One-pole low-pass takes the hiss off the white noise.
-    smoothed += 0.45 * (Math.random() * 2 - 1 - smoothed);
-    const impact = smoothed * Math.exp(-t / 0.003);
-    const ring = Math.sin(2 * Math.PI * ringHz * t) * Math.exp(-t / 0.005) * 0.35;
-    const thump = Math.sin(2 * Math.PI * thumpHz * t) * Math.exp(-t / 0.012) * 0.4;
-    data[i] = (impact + ring + thump) * 0.8;
-  }
+  const samples = synthesiseClickSamples(ctx.sampleRate);
+  const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+  buffer.getChannelData(0).set(samples);
   return buffer;
 }
 
