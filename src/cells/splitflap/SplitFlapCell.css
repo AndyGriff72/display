@@ -1,0 +1,105 @@
+/*
+ * A split-flap cell is two halves with a hinge between them. Each half shows half of a
+ * full-height glyph, clipped, so the two halves line up into one character.
+ *
+ * Colours can be overridden per board or per cell through the custom properties.
+ */
+.sf-cell {
+  --sf-bg: #1d1d1f;
+  --sf-bg-edge: #111;
+  --sf-fg: #f3efe2;
+  --sf-gap: max(1px, calc(var(--sf-h) * 0.02));
+  --sf-radius: calc(var(--sf-w) * 0.08);
+  --sf-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: var(--sf-w);
+  height: var(--sf-h);
+  perspective: calc(var(--sf-h) * 4);
+  font-family: var(--sf-font);
+  font-size: var(--sf-font-size);
+  font-weight: 500;
+  color: var(--sf-fg);
+  user-select: none;
+}
+
+.sf-half {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(50% - var(--sf-gap) / 2);
+  overflow: hidden;
+  background: var(--sf-bg);
+  backface-visibility: hidden;
+}
+
+.sf-top {
+  top: 0;
+  border-radius: var(--sf-radius) var(--sf-radius) 0 0;
+  background: linear-gradient(to bottom, var(--sf-bg), var(--sf-bg-edge));
+  transform-origin: 50% calc(100% + var(--sf-gap) / 2);
+}
+
+.sf-bottom {
+  bottom: 0;
+  border-radius: 0 0 var(--sf-radius) var(--sf-radius);
+  background: linear-gradient(to top, var(--sf-bg), var(--sf-bg-edge));
+  transform-origin: 50% calc(var(--sf-gap) / -2);
+}
+
+/* The glyph is the full cell height; each half shows the part of it that falls inside. */
+.sf-glyph {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--sf-h);
+  line-height: var(--sf-h);
+  text-align: center;
+  white-space: pre;
+}
+
+.sf-top .sf-glyph {
+  top: 0;
+}
+
+.sf-bottom .sf-glyph {
+  bottom: 0;
+}
+
+.sf-flaps .sf-flap {
+  z-index: 2;
+}
+
+/* The top flap folds down over the hinge and out of sight, darkening as it turns away from the light... */
+.sf-flaps .sf-top {
+  animation: sf-fall-top calc(var(--sf-flip) / 2) ease-in forwards;
+}
+
+/* ...then the back of it, the next character's bottom, swings down into place and lands. */
+.sf-flaps .sf-bottom {
+  animation: sf-fall-bottom calc(var(--sf-flip) / 2) ease-out calc(var(--sf-flip) / 2) both;
+}
+
+@keyframes sf-fall-top {
+  from {
+    transform: rotateX(0deg);
+    filter: brightness(1);
+  }
+  to {
+    transform: rotateX(-90deg);
+    filter: brightness(0.55);
+  }
+}
+
+@keyframes sf-fall-bottom {
+  from {
+    transform: rotateX(90deg);
+    filter: brightness(0.55);
+  }
+  to {
+    transform: rotateX(0deg);
+    filter: brightness(1);
+  }
+}
