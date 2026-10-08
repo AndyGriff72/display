@@ -7,18 +7,28 @@
  * written on its own, e.g. "5,2".
  */
 
+export const CELL_TYPES = ["splitflap", "dotmatrix", "segment"] as const;
+export type CellType = (typeof CELL_TYPES)[number];
+
+/** How every cell on the board looks. Settings that do not apply to the cell type are ignored. */
 export interface CellSettings {
-  type: "splitflap";
+  type: CellType;
   /** Cell size in pixels. */
   width: number;
   height: number;
   /** Space between cells in pixels. */
   gapX?: number;
   gapY?: number;
+  /** Character colour: the print on a flap, or a lit LED. Any CSS colour. */
+  color?: string;
+  /** Split-flap: the typeface. */
   fontFamily?: string;
-  /** The flap stack, in drum order. */
+  /** Split-flap: the flap stack, in drum order. */
   stack?: string;
+  /** Split-flap: how long one flap takes to fall, in milliseconds. */
   flipMs?: number;
+  /** Segment: 7 for digits, 14 for text. */
+  segments?: 7 | 14;
 }
 
 /** A fixed part of the board. It has no character cells; it will hold fixed graphics. */
@@ -109,6 +119,14 @@ export function validateLayout(layout: BoardLayout): string[] {
   if (!(layout.columns >= 1) || !(layout.rows >= 1)) {
     errors.push("The board needs at least one column and one row.");
     return errors;
+  }
+
+  const { cell } = layout;
+  if (!CELL_TYPES.includes(cell?.type)) {
+    errors.push(`Cell type must be one of ${CELL_TYPES.map((t) => `"${t}"`).join(", ")}.`);
+  }
+  if (cell?.segments !== undefined && cell.segments !== 7 && cell.segments !== 14) {
+    errors.push("Segments must be 7 or 14.");
   }
 
   const seen = new Set<string>();

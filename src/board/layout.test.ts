@@ -57,6 +57,13 @@ describe("validateLayout", () => {
     ).toEqual(['"dest" and "logo" overlap.']);
   });
 
+  it("reports a cell type or segment count it does not know", () => {
+    expect(validateLayout({ ...base, cell: { ...cell, type: "nixie" as "segment" } })[0]).toContain("Cell type must be");
+    expect(validateLayout({ ...base, cell: { ...cell, type: "segment", segments: 16 as 14 } })).toEqual([
+      "Segments must be 7 or 14.",
+    ]);
+  });
+
   it("reports an image fit it does not know", () => {
     const errors = validateLayout({
       ...base,

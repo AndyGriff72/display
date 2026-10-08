@@ -1,4 +1,6 @@
 import { useMemo, type CSSProperties } from "react";
+import { DotMatrixCell } from "../cells/dotmatrix/DotMatrixCell";
+import { SegmentCell } from "../cells/segment/SegmentCell";
 import { SplitFlapCell } from "../cells/splitflap/SplitFlapCell";
 import { composeBoard, parseArea, type BoardLayout, type Rect } from "./layout";
 import "./Board.css";
@@ -35,19 +37,30 @@ export function Board({ layout, values, onFlap, showAreas }: BoardProps) {
     <div className={`board${showAreas ? " board-show-areas" : ""}`} style={gridStyle}>
       {[...cells].map(([key, ch]) => {
         const [x, y] = key.split(",").map(Number);
-        return (
-          <SplitFlapCell
-            key={key}
-            char={ch}
-            width={cell.width}
-            height={cell.height}
-            fontFamily={cell.fontFamily}
-            stack={cell.stack}
-            flipMs={cell.flipMs}
-            onFlap={onFlap}
-            style={{ gridColumn: x + 1, gridRow: y + 1 }}
-          />
-        );
+        const common = {
+          char: ch,
+          width: cell.width,
+          height: cell.height,
+          color: cell.color,
+          style: { gridColumn: x + 1, gridRow: y + 1 },
+        };
+        switch (cell.type) {
+          case "dotmatrix":
+            return <DotMatrixCell key={key} {...common} />;
+          case "segment":
+            return <SegmentCell key={key} {...common} segments={cell.segments} />;
+          default:
+            return (
+              <SplitFlapCell
+                key={key}
+                {...common}
+                fontFamily={cell.fontFamily}
+                stack={cell.stack}
+                flipMs={cell.flipMs}
+                onFlap={onFlap}
+              />
+            );
+        }
       })}
       {statics.map(({ id, rect, image, fit, padding, background }) => (
         <div key={id} className="board-static" style={{ ...gridArea(rect), padding, background }}>

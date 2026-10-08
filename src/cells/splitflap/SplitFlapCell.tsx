@@ -23,6 +23,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({
   height,
   fontSize,
   fontFamily,
+  color,
   stack = CHARSETS.standard,
   flipMs = 80,
   onFlap,
@@ -72,6 +73,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({
     "--sf-font-size": `${fontSize ?? Math.round(height * 0.78)}px`,
     "--sf-flip": `${flipMs}ms`,
     ...(fontFamily ? { "--sf-font": fontFamily } : {}),
+    ...(color ? { "--sf-fg": color } : {}),
     ...style,
   } as CSSProperties;
 

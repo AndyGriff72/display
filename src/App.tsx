@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { flapSound } from "./audio/flapSound";
 import { Board } from "./board/Board";
-import { parseArea, validateLayout, type BoardLayout } from "./board/layout";
+import { CELL_TYPES, parseArea, validateLayout, type BoardLayout, type CellType } from "./board/layout";
 import { CHARSETS, type CharsetName } from "./cells/charsets";
 import { FONTS, loadFont } from "./fonts";
 
@@ -28,6 +28,27 @@ const DEPARTURES: Record<string, string>[] = [
   { time: "15:20", destination: "GLASGOW", calling: "PRESTON, LANCASTER,\nOXENHOLME, PENRITH", platform: "PLATFORM 9", status: "CANCELLED" },
 ];
 
+const CELL_TYPE_LABELS: Record<CellType, string> = {
+  splitflap: "Split-flap",
+  dotmatrix: "Dot matrix",
+  segment: "LED segments",
+};
+
+/** Each cell type starts in the colour it is best known in. */
+const DEFAULT_COLOURS: Record<CellType, string> = {
+  splitflap: "#f3efe2",
+  dotmatrix: "#ffb000",
+  segment: "#ff3b1f",
+};
+
+const COLOUR_PRESETS = [
+  { label: "Amber", value: "#ffb000" },
+  { label: "Red", value: "#ff3b1f" },
+  { label: "Green", value: "#39ff6a" },
+  { label: "White", value: "#f3efe2" },
+  { label: "Blue", value: "#3fa9ff" },
+];
+
 const playFlap = () => flapSound.play();
 
 export default function App() {
@@ -38,6 +59,9 @@ export default function App() {
   const [departure, setDeparture] = useState(0);
   const [showAreas, setShowAreas] = useState(true);
 
+  const [cellType, setCellType] = useState<CellType>("splitflap");
+  const [colour, setColour] = useState(DEFAULT_COLOURS.splitflap);
+  const [segments, setSegments] = useState<7 | 14>(14);
   const [cellWidth, setCellWidth] = useState(32);
   const [cellHeight, setCellHeight] = useState(50);
   const [flipMs, setFlipMs] = useState(80);
@@ -54,15 +78,17 @@ export default function App() {
     () => ({
       ...shape,
       cell: {
-        type: "splitflap",
+        type: cellType,
         width: cellWidth,
         height: cellHeight,
+        color: colour,
         fontFamily: font.family,
         stack: CHARSETS[stackName],
         flipMs,
+        segments,
       },
     }),
-    [shape, cellWidth, cellHeight, font, stackName, flipMs]
+    [shape, cellType, cellWidth, cellHeight, colour, font, stackName, flipMs, segments]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -75,6 +101,11 @@ export default function App() {
     } catch (e) {
       setJsonError((e as Error).message);
     }
+  };
+
+  const changeCellType = (type: CellType) => {
+    setCellType(type);
+    setColour(DEFAULT_COLOURS[type]);
   };
 
   const toggleSound = async () => {
@@ -144,28 +175,67 @@ export default function App() {
         )}
 
         <label>
-          Typeface
-          <select value={fontId} onChange={(e) => setFontId(e.target.value)}>
-            {FONTS.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
+          Cell type
+          <select value={cellType} onChange={(e) => changeCellType(e.target.value as CellType)}>
+            {CELL_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {CELL_TYPE_LABELS[t]}
               </option>
             ))}
           </select>
         </label>
         <label>
-          Flap stack
-          <select value={stackName} onChange={(e) => setStackName(e.target.value as CharsetName)}>
-            {Object.keys(CHARSETS).map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
+          Colour
+          <span className="colours">
+            <input type="color" value={colour} onChange={(e) => setColour(e.target.value)} />
+            {COLOUR_PRESETS.map((p) => (
+              <button
+                key={p.value}
+                className="swatch"
+                title={p.label}
+                aria-label={p.label}
+                style={{ background: p.value }}
+                onClick={() => setColour(p.value)}
+              />
             ))}
-          </select>
+          </span>
         </label>
+        {cellType === "segment" && (
+          <label>
+            Segments
+            <select value={segments} onChange={(e) => setSegments(Number(e.target.value) as 7 | 14)}>
+              <option value={14}>14 (letters and digits)</option>
+              <option value={7}>7 (digits)</option>
+            </select>
+          </label>
+        )}
+        {cellType === "splitflap" && (
+          <>
+            <label>
+              Typeface
+              <select value={fontId} onChange={(e) => setFontId(e.target.value)}>
+                {FONTS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Flap stack
+              <select value={stackName} onChange={(e) => setStackName(e.target.value as CharsetName)}>
+                {Object.keys(CHARSETS).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Slider label="Flip time" unit="ms" value={flipMs} min={30} max={400} step={10} onChange={setFlipMs} />
+          </>
+        )}
         <Slider label="Cell width" unit="px" value={cellWidth} min={16} max={120} onChange={setCellWidth} />
         <Slider label="Cell height" unit="px" value={cellHeight} min={24} max={180} onChange={setCellHeight} />
-        <Slider label="Flip time" unit="ms" value={flipMs} min={30} max={400} step={10} onChange={setFlipMs} />
         <Slider label="Volume" value={Math.round(volume * 100)} unit="%" min={0} max={100} onChange={(v) => setVolume(v / 100)} />
       </section>
     </main>

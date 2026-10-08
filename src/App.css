@@ -67,6 +67,30 @@ body {
   align-items: center;
 }
 
+.colours {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.colours input[type="color"] {
+  width: 40px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: none;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #2a2b2e;
+  box-shadow: 0 0 0 1px #555;
+}
+
 .hint {
   color: #888;
   font-size: 12px;

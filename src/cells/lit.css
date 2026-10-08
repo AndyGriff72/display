@@ -1,0 +1,27 @@
+/*
+ * Shared look for cells that light up (dot matrix, segments). The colour is the cell's CSS
+ * `color`; everything is drawn in currentColor so one setting colours the lot.
+ */
+.lit-cell {
+  --lit-unlit-opacity: 0.09;
+
+  display: block;
+  box-sizing: border-box;
+  padding: 6%;
+  color: #ffb000;
+  background: #0a0a0b;
+  border-radius: 3px;
+  overflow: visible;
+}
+
+.lit-cell circle {
+  fill: currentColor;
+}
+
+.lit-cell line {
+  stroke: currentColor;
+}
+
+.lit-off {
+  opacity: var(--lit-unlit-opacity);
+}

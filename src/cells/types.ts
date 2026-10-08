@@ -13,8 +13,10 @@ export interface CellProps {
   height: number;
   /** Glyph size in pixels. Defaults to a proportion of the height that suits the cell type. */
   fontSize?: number;
-  /** CSS font-family for the glyph. */
+  /** CSS font-family for the glyph. Only cells that draw with a font use it. */
   fontFamily?: string;
+  /** Colour of the characters: the print on a flap, or a lit LED. Any CSS colour. */
+  color?: string;
   className?: string;
   style?: CSSProperties;
 }
