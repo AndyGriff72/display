@@ -18,6 +18,12 @@ return [
         'key' => env('POSTMARK_API_KEY'),
     ],
 
+    // Dedicated key for encrypting saved database passwords, separate from APP_KEY, as in
+    // Redbrix. Generate one with: php -r "echo 'base64:'.base64_encode(random_bytes(32));"
+    'credential' => [
+        'key' => env('CREDENTIAL_KEY'),
+    ],
+
     'resend' => [
         'key' => env('RESEND_API_KEY'),
     ],

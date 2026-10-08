@@ -127,6 +127,9 @@ return [
     |
     */
 
+    // Whether people may connect the board to a PostgreSQL database (see DatabaseEngines).
+    'postgresql_enabled' => (bool) env('DISPLAY_ENABLE_POSTGRESQL', false),
+
     'migrations' => [
         'table' => 'migrations',
         'update_date_on_publish' => true,

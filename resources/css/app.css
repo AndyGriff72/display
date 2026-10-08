@@ -114,6 +114,8 @@ body {
 button,
 select,
 input:not([type]),
+input[type="number"],
+input[type="password"],
 textarea {
   font: inherit;
   padding: 6px 10px;
@@ -129,4 +131,115 @@ button {
 
 button:hover {
   background: #26282b;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.primary {
+  background: #2d5bd1;
+  border-color: #3a68df;
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled) {
+  background: #3a68df;
+}
+
+button.danger {
+  margin-left: auto;
+  border-color: #7a3a33;
+  color: #ffb4a8;
+}
+
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 24px;
+  background: #1b1c1e;
+  border-bottom: 1px solid #3a3a3e;
+}
+
+.topnav .brand {
+  font-weight: 600;
+  margin-right: 12px;
+}
+
+.topnav a {
+  color: #aaa;
+  text-decoration: none;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+}
+
+.topnav a.active {
+  color: #fff;
+  border-bottom-color: #3a68df;
+}
+
+.page {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 32px 16px;
+  box-sizing: border-box;
+}
+
+.page h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.lede {
+  margin: 0 0 24px;
+  color: #aaa;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px 24px;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.form .wide {
+  grid-column: 1 / -1;
+}
+
+.form .check {
+  flex-direction: row;
+  align-items: center;
+}
+
+.form p {
+  margin: 0;
+}
+
+.field-error {
+  color: #ffb4a8;
+  font-size: 13px;
+}
+
+.notice {
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.notice.ok {
+  color: #b6f0c2;
+  background: #1c3a24;
+}
+
+.notice.error {
+  color: #ffb4a8;
+  background: #3a1f1c;
 }
