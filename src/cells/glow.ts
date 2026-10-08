@@ -15,23 +15,35 @@ const FILTERS: [id: string, blur: number, region: [x: number, y: number, w: numb
   [GLOW_SEGMENT, 2.6, [-20, -15, 110, 130]],
 ];
 
-let added = false;
+const CONTAINER_ID = "lit-glow-filters";
+const MARKUP =
+  "<defs>" +
+  FILTERS.map(
+    ([id, blur, [x, y, w, h]]) =>
+      `<filter id="${id}" filterUnits="userSpaceOnUse" x="${x}" y="${y}" width="${w}" height="${h}">` +
+      `<feGaussianBlur in="SourceGraphic" stdDeviation="${blur}" result="blur"/>` +
+      `<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>` +
+      `</filter>`
+  ).join("") +
+  "</defs>";
 
+/**
+ * Add the filters to the page, or bring them up to date. The page is checked rather than a
+ * module flag, because a hot reload during development runs this module afresh while the
+ * old filters are still in the page; adding a second copy would leave the browser using
+ * the first, out-of-date one, since it resolves a repeated id to the first match.
+ */
 export function ensureGlowFilters(): void {
-  if (added || typeof document === "undefined") return;
-  added = true;
+  if (typeof document === "undefined") return;
+  const existing = document.getElementById(CONTAINER_ID);
+  if (existing) {
+    if (existing.innerHTML !== MARKUP) existing.innerHTML = MARKUP;
+    return;
+  }
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.id = CONTAINER_ID;
   svg.setAttribute("aria-hidden", "true");
   svg.style.cssText = "position:absolute;width:0;height:0;overflow:hidden";
-  svg.innerHTML =
-    "<defs>" +
-    FILTERS.map(
-      ([id, blur, [x, y, w, h]]) =>
-        `<filter id="${id}" filterUnits="userSpaceOnUse" x="${x}" y="${y}" width="${w}" height="${h}">` +
-        `<feGaussianBlur in="SourceGraphic" stdDeviation="${blur}" result="blur"/>` +
-        `<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>` +
-        `</filter>`
-    ).join("") +
-    "</defs>";
+  svg.innerHTML = MARKUP;
   document.body.appendChild(svg);
 }

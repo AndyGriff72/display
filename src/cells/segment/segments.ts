@@ -14,7 +14,9 @@
  *      ─── d ───  dp
  *
  * A seven-segment display only has a–g, so its letters are the usual approximations
- * (b, d, n, r and so on); words read far better on fourteen segments.
+ * (b, d, t and so on); words read far better on fourteen segments. N and R are drawn
+ * full height, with both segments on each upright, because the short lower-case forms
+ * are easily misread.
  */
 
 export type SegmentCount = 7 | 14;
@@ -68,7 +70,7 @@ const SEVEN: Record<string, string> = {
   "5": "acdfg", "6": "acdefg", "7": "abc", "8": "abcdefg", "9": "abcdfg",
   A: "abcefg", B: "cdefg", C: "adef", D: "bcdeg", E: "adefg", F: "aefg",
   G: "acdef", H: "bcefg", I: "ef", J: "bcde", K: "bcefg", L: "def",
-  M: "ace", N: "ceg", O: "abcdef", P: "abefg", Q: "abcfg", R: "eg",
+  M: "ace", N: "abcef", O: "abcdef", P: "abefg", Q: "abcfg", R: "aef",
   S: "acdfg", T: "defg", U: "bcdef", V: "cde", W: "bdf", X: "bcefg",
   Y: "bcdfg", Z: "abdeg",
   "-": "g", _: "d", "=": "dg", "'": "b", '"': "bf", "(": "adef", ")": "abcd", "?": "abeg",
