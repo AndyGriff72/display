@@ -26,15 +26,3 @@
   color: #888;
   font: 18px system-ui, sans-serif;
 }
-
-.screen-hint {
-  position: fixed;
-  bottom: 16px;
-  right: 20px;
-  margin: 0;
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.55);
-  font: 14px system-ui, sans-serif;
-}

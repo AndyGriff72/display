@@ -20,12 +20,11 @@ class ScreenApiTest extends TestCase
         ]]);
     }
 
-    public function test_any_screen_can_fetch_a_board_by_its_key(): void
+    public function test_any_screen_can_fetch_a_board_by_its_key_without_signing_in(): void
     {
         $board = $this->board();
 
-        $this->withServerVariables(['REMOTE_ADDR' => '192.168.1.50'])
-            ->getJson("/api/screens/{$board->uuid}")
+        $this->getJson("/api/screens/{$board->uuid}")
             ->assertOk()
             ->assertJsonPath('data.name', 'Concourse')
             ->assertJsonPath('data.layout.columns', 24)

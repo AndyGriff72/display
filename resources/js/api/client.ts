@@ -13,6 +13,19 @@ export const api = axios.create({
   },
 });
 
+// A session that has ended, or was never started: off to sign in, as Redbrix does it. Screens
+// never see this, since nothing they ask for needs a sign-in.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) window.location.href = "/login";
+    return Promise.reject(error);
+  }
+);
+
+/** The CSRF token, for a plain form posted outside axios (signing out). */
+export const csrfToken = readCsrfToken;
+
 /** Redbrix's response envelope. */
 export interface ApiResponse<T> {
   status: number;

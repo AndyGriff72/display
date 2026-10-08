@@ -12,9 +12,6 @@ import "./ScreenPage.css";
 /** How often a screen checks whether its board has been edited, in seconds. */
 const LAYOUT_CHECK_SECONDS = 60;
 
-/** How long the "tap for sound" hint stays up, in seconds. */
-const SOUND_HINT_SECONDS = 15;
-
 /**
  * A saved board, alone on the page and scaled to fill the display: what a screen in a station
  * or a reception shows. Nothing to sign in to and nothing to click; it keeps its data and its
@@ -70,7 +67,7 @@ export default function ScreenPage() {
   }, [layout?.cell.fontFamily]);
 
   useWakeLock();
-  const sound = useSound(layout?.sound);
+  const onFlap = useSound(layout?.sound);
   const { outerRef, innerRef, scale } = useFitToScreen(board);
 
   // Double-click for full screen. A screen set up properly runs the browser in kiosk mode instead.
@@ -83,11 +80,10 @@ export default function ScreenPage() {
     <div className="screen" ref={outerRef} onDoubleClick={toggleFullScreen}>
       {layout && (
         <div className="screen-board" ref={innerRef} style={{ transform: `scale(${scale})` }}>
-          <Board layout={layout} values={values} records={data.rows} page={page} onFlap={sound.onFlap} />
+          <Board layout={layout} values={values} records={data.rows} page={page} onFlap={onFlap} />
         </div>
       )}
       {!layout && problem && <p className="screen-message">{problem}</p>}
-      {sound.hint && <p className="screen-hint">Tap the screen to turn on the flap sound</p>}
     </div>
   );
 }
@@ -117,44 +113,25 @@ function useWakeLock() {
 }
 
 /**
- * The flap sound, when the board asks for it. Browsers only allow sound once someone has
- * tapped, clicked or pressed a key on the page, so it starts then, with a hint until it has.
+ * The flap sound, when the board's setting says so. It starts at once if the browser allows,
+ * and otherwise at the first tap or key press (see flapSound.enable); a screen meant to make
+ * sound unattended should have sound allowed for the site, or run in kiosk mode with the
+ * autoplay policy relaxed.
  */
 function useSound(setting: { enabled?: boolean; volume?: number } | undefined) {
-  const wanted = !!setting?.enabled;
-  const [on, setOn] = useState(false);
-  const [hintTimedOut, setHintTimedOut] = useState(false);
+  const on = !!setting?.enabled;
 
   useEffect(() => {
     flapSound.setVolume(setting?.volume ?? 0.5);
   }, [setting?.volume]);
 
   useEffect(() => {
-    if (!wanted) {
-      flapSound.disable();
-      setOn(false);
-      return;
-    }
-    const start = () => {
-      flapSound
-        .enable()
-        .then(() => setOn(true))
-        .catch(() => {});
-    };
-    window.addEventListener("pointerdown", start);
-    window.addEventListener("keydown", start);
-    const timer = window.setTimeout(() => setHintTimedOut(true), SOUND_HINT_SECONDS * 1000);
-    return () => {
-      window.removeEventListener("pointerdown", start);
-      window.removeEventListener("keydown", start);
-      window.clearTimeout(timer);
-    };
-  }, [wanted]);
+    if (on) flapSound.enable();
+    else flapSound.disable();
+    return () => flapSound.disable();
+  }, [on]);
 
-  return {
-    onFlap: wanted && on ? () => flapSound.play() : undefined,
-    hint: wanted && !on && !hintTimedOut,
-  };
+  return on ? () => flapSound.play() : undefined;
 }
 
 /** Scale the board, keeping its shape, to the largest size that fits the window. */

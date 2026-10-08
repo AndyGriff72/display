@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Connections\ConnectionProvider;
 use App\Models\OrganizationConnection;
+use App\Models\User;
 use App\Services\ConnectionVerifier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,7 @@ class ConnectionApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->actingAs(User::factory()->create());
 
         // Never reach for a real database server.
         $this->verifier = new FakeVerifier();
@@ -148,12 +150,20 @@ class ConnectionApiTest extends TestCase
         ], app(ConnectionProvider::class)->params());
     }
 
-    public function test_admin_requests_are_refused_from_other_machines(): void
+    public function test_the_connection_needs_a_signed_in_user(): void
     {
-        $this->withServerVariables(['REMOTE_ADDR' => '192.168.1.50'])
-            ->getJson('/api/connection')
-            ->assertForbidden()
-            ->assertJson(['status' => 403]);
+        auth()->forgetGuards();
+
+        $this->getJson('/api/connection')->assertUnauthorized();
+        $this->putJson('/api/connection', $this->details())->assertUnauthorized();
+        $this->assertSame(0, OrganizationConnection::count());
+    }
+
+    public function test_records_who_saved_the_password(): void
+    {
+        $this->putJson('/api/connection', $this->details())->assertOk();
+
+        $this->assertSame(auth()->id(), OrganizationConnection::firstOrFail()->credential_saved_by_user_id);
     }
 
     public function test_an_unknown_api_address_is_a_json_404(): void

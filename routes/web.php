@@ -1,18 +1,26 @@
 <?php
 
+use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardDataController;
 use App\Http\Controllers\ConnectionController;
 use App\Http\Controllers\DataSourceController;
 use App\Http\Controllers\SchemaController;
 use App\Http\Controllers\ScreenController;
-use App\Http\Middleware\LocalAdminOnly;
 use Illuminate\Support\Facades\Route;
 
+// Signing in and out. No sign-up page: the admin is created with `php artisan display:admin`.
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [LoginController::class, 'show'])->name('login');
+    Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:login');
+});
+Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->name('logout');
+
 // The board's JSON API. Under the web middleware group, as Redbrix's is, so the React app's
-// requests carry the session and CSRF token.
+// requests carry the session and CSRF token. Setting up needs a signed-in user; a request
+// without one is answered 401, which the app turns into a trip to the sign-in page.
 Route::prefix('api')->group(function () {
-    Route::middleware(LocalAdminOnly::class)->group(function () {
+    Route::middleware('auth')->group(function () {
         Route::get('/connection', [ConnectionController::class, 'show']);
         Route::put('/connection', [ConnectionController::class, 'save']);
         Route::post('/connection/test', [ConnectionController::class, 'test']);
@@ -43,6 +51,9 @@ Route::prefix('api')->group(function () {
         ->where('any', '.*');
 });
 
-// The board editor is a single-page React app; every page it routes to itself is served
-// the same shell, as Redbrix's SPA is.
-Route::fallback(fn () => view('app'));
+// A screen is the app's page too, but open to anyone with its address.
+Route::get('/screen/{key}', fn () => view('app'));
+
+// The board editor is a single-page React app; every page it routes to itself is served the
+// same shell, as Redbrix's SPA is, once signed in.
+Route::fallback(fn () => view('app'))->middleware('auth');

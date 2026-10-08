@@ -16,7 +16,15 @@ php artisan key:generate
 # Key that encrypts saved database passwords (kept separate from APP_KEY):
 php -r "echo 'CREDENTIAL_KEY=base64:'.base64_encode(random_bytes(32)).PHP_EOL;" >> .env
 php artisan migrate        # creates database/database.sqlite if it is missing
+php artisan display:admin you@example.com --name="Your Name"   # asks for a password
 ```
+
+There is no sign-up page: `display:admin` creates the one admin, and run again for an existing
+email it sets a new password. Screens (`/screen/{key}`) need no sign-in.
+
+Screens that should make the flap sound unattended need the browser to allow sound without a
+tap: set the site's Sound permission to Allow, or start Edge or Chrome with
+`--autoplay-policy=no-user-gesture-required` (usual for kiosk set-ups).
 
 ## Running it
 

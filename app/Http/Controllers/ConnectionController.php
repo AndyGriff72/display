@@ -93,7 +93,7 @@ class ConnectionController extends Controller
         ])->save();
 
         if (($details['password'] ?? '') !== '') {
-            $connection->storeCredential($details['password']);
+            $connection->storeCredential($details['password'], $request->user());
         }
         $connection->markVerified();
 

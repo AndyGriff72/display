@@ -65,7 +65,6 @@ export default function BoardEditorPage() {
   // "nothing yet", so the first render always opens whatever the address names.
   const shownId = useRef<number | undefined | null>(null);
   const [boardNotice, setBoardNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
-  const [screenSound, setScreenSound] = useState(false);
   const screenKey = boards.find((b) => b.id === boardId)?.uuid;
   const [layoutText, setLayoutText] = useState(() => JSON.stringify(SAMPLES[0].layout, null, 2));
   const [shape, setShape] = useState<LayoutShape>(SAMPLES[0].layout);
@@ -84,6 +83,7 @@ export default function BoardEditorPage() {
   const [flipMs, setFlipMs] = useState(80);
   const [fontId, setFontId] = useState(FONTS[0].id);
   const [stackName, setStackName] = useState<CharsetName>("standard");
+  // Saved with the board: whether it makes the flap sound, here and on screens.
   const [soundOn, setSoundOn] = useState(false);
   const [volume, setVolume] = useState(0.5);
 
@@ -174,8 +174,8 @@ export default function BoardEditorPage() {
 
   // Everything that is saved: the layout, its appearance and the screens' sound.
   const fullLayout: BoardLayout = useMemo(
-    () => ({ ...layout, sound: { enabled: screenSound, volume } }),
-    [layout, screenSound, volume]
+    () => ({ ...layout, sound: { enabled: soundOn, volume } }),
+    [layout, soundOn, volume]
   );
   const current = snapshot(name.trim(), fullLayout);
   const dirty = savedSnapshot === null || current !== savedSnapshot;
@@ -196,7 +196,7 @@ export default function BoardEditorPage() {
       (Object.keys(CHARSETS) as CharsetName[]).find((k) => cell.stack !== undefined && CHARSETS[k] === normalizeStack(cell.stack)) ??
         "standard"
     );
-    setScreenSound(!!sound?.enabled);
+    setSoundOn(!!sound?.enabled);
     setVolume(sound?.volume ?? 0.5);
   };
 
@@ -307,15 +307,12 @@ export default function BoardEditorPage() {
     setColour(DEFAULT_COLOURS[type]);
   };
 
-  const toggleSound = async () => {
-    if (soundOn) {
-      flapSound.disable();
-      setSoundOn(false);
-    } else {
-      await flapSound.enable();
-      setSoundOn(true);
-    }
-  };
+  // The board's sound setting, heard here as it will be on screens.
+  useEffect(() => {
+    if (soundOn) flapSound.enable();
+    else flapSound.disable();
+  }, [soundOn]);
+  useEffect(() => () => flapSound.disable(), []);
 
   return (
     <main className="app">
@@ -386,11 +383,7 @@ export default function BoardEditorPage() {
         )}
 
         <div className="buttons wide">
-          <button onClick={toggleSound}>{soundOn ? "Stop listening here" : "Listen here"}</button>
-          <label className="check">
-            <input type="checkbox" checked={screenSound} onChange={(e) => setScreenSound(e.target.checked)} />
-            Screens play the flap sound
-          </label>
+          <Switch checked={soundOn} onChange={setSoundOn} label="Flap sound" />
           <label className="check">
             <input type="checkbox" checked={showAreas} onChange={(e) => setShowAreas(e.target.checked)} />
             Outline areas
@@ -515,6 +508,17 @@ export default function BoardEditorPage() {
         <Slider label="Volume" value={Math.round(volume * 100)} unit="%" min={0} max={100} onChange={(v) => setVolume(v / 100)} />
       </section>
     </main>
+  );
+}
+
+/** An on/off switch: a checkbox drawn as a sliding toggle. */
+function Switch({ checked, onChange, label }: { checked: boolean; onChange: (on: boolean) => void; label: string }) {
+  return (
+    <label className="switch">
+      <input type="checkbox" role="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className="switch-track" aria-hidden />
+      {label}
+    </label>
   );
 }
 

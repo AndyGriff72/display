@@ -3,6 +3,9 @@ import BoardEditorPage from "./pages/BoardEditorPage";
 import ConnectionPage from "./pages/ConnectionPage";
 import DataSourcesPage from "./pages/DataSourcesPage";
 import ScreenPage from "./pages/ScreenPage";
+import { csrfToken } from "./api/client";
+
+const userName = document.querySelector<HTMLMetaElement>('meta[name="user-name"]')?.content ?? "";
 
 export default function App() {
   return (
@@ -34,6 +37,13 @@ function Nav() {
       </NavLink>
       <NavLink to="/data-sources">Data sources</NavLink>
       <NavLink to="/connection">Connection</NavLink>
+      <span className="topnav-user">
+        {userName}
+        <form method="post" action="/logout">
+          <input type="hidden" name="_token" value={csrfToken()} />
+          <button type="submit">Sign out</button>
+        </form>
+      </span>
     </nav>
   );
 }

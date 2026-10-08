@@ -3,12 +3,19 @@
 namespace Tests\Feature;
 
 use App\Models\Board;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class BoardApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->actingAs(User::factory()->create());
+    }
 
     private function layout(array $overrides = []): array
     {
@@ -108,13 +115,14 @@ class BoardApiTest extends TestCase
         $this->getJson("/api/boards/{$board->id}")->assertNotFound();
     }
 
-    public function test_boards_can_only_be_edited_from_this_machine(): void
+    public function test_boards_need_a_signed_in_user(): void
     {
         $board = Board::create(['name' => 'Concourse', 'layout' => $this->layout()]);
-        $remote = $this->withServerVariables(['REMOTE_ADDR' => '192.168.1.50']);
+        auth()->forgetGuards();
 
-        $remote->getJson('/api/boards')->assertForbidden();
-        $remote->getJson("/api/boards/{$board->id}")->assertForbidden();
-        $remote->putJson("/api/boards/{$board->id}", ['name' => 'X', 'layout' => $this->layout()])->assertForbidden();
+        $this->getJson('/api/boards')->assertUnauthorized();
+        $this->getJson("/api/boards/{$board->id}")->assertUnauthorized();
+        $this->putJson("/api/boards/{$board->id}", ['name' => 'X', 'layout' => $this->layout()])->assertUnauthorized();
+        $this->assertSame('Concourse', $board->fresh()->name);
     }
 }

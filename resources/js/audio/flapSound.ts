@@ -21,10 +21,14 @@ class FlapSound {
   private volume = 0.5;
 
   /**
-   * Browsers only let audio start from a user gesture, so call this from a click handler
-   * (the sound toggle) rather than on page load.
+   * Turn the sound on, starting it now if the browser allows.
+   *
+   * Browsers hold sound back on a page nobody has clicked, tapped or typed on yet, unless they
+   * have been told to allow it for the site (or, for a screen, started with the autoplay policy
+   * relaxed). When held back, it starts by itself at the first click, tap or key press, with
+   * nothing for anyone to do or see.
    */
-  async enable(): Promise<void> {
+  enable(): void {
     if (!this.ctx) {
       this.ctx = new AudioContext();
       this.output = this.ctx.createGain();
@@ -32,8 +36,24 @@ class FlapSound {
       this.output.connect(this.ctx.destination);
       this.synthesised = Array.from({ length: VARIANTS }, () => synthesiseClick(this.ctx!));
     }
-    await this.ctx.resume();
     this.enabled = true;
+    this.ctx.resume().catch(() => {});
+    if (this.ctx.state !== "running") this.resumeOnFirstInteraction();
+  }
+
+  private waitingForInteraction = false;
+
+  private resumeOnFirstInteraction(): void {
+    if (this.waitingForInteraction) return;
+    this.waitingForInteraction = true;
+    const resume = () => {
+      this.ctx?.resume().catch(() => {});
+      window.removeEventListener("pointerdown", resume, true);
+      window.removeEventListener("keydown", resume, true);
+      this.waitingForInteraction = false;
+    };
+    window.addEventListener("pointerdown", resume, true);
+    window.addEventListener("keydown", resume, true);
   }
 
   disable(): void {

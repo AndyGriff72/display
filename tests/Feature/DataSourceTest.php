@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Data\TargetDatabase;
 use App\Data\TargetDatabases;
 use App\Models\BoardDataSource;
+use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -22,6 +23,7 @@ class DataSourceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->actingAs(User::factory()->create());
 
         $this->target = SqliteTargetDatabase::create();
         Schema::connection(SqliteTargetDatabase::NAME)->create('departures', function (Blueprint $t) {
@@ -260,15 +262,15 @@ class DataSourceTest extends TestCase
             ->assertDontSee('refused');
     }
 
-    public function test_setting_up_is_refused_from_other_machines_but_screens_can_fetch_data(): void
+    public function test_setting_up_needs_a_signed_in_user_but_screens_can_fetch_data(): void
     {
         $uuid = $this->postJson('/api/data-sources', $this->definition())->json('data.uuid');
+        auth()->forgetGuards();
 
-        $remote = $this->withServerVariables(['REMOTE_ADDR' => '192.168.1.50']);
-        $remote->getJson('/api/data-sources')->assertForbidden();
-        $remote->getJson('/api/schema/tables')->assertForbidden();
-        $remote->postJson('/api/data-sources/preview', $this->definition())->assertForbidden();
-        $remote->getJson("/api/board-data/{$uuid}")->assertOk();
+        $this->getJson('/api/data-sources')->assertUnauthorized();
+        $this->getJson('/api/schema/tables')->assertUnauthorized();
+        $this->postJson('/api/data-sources/preview', $this->definition())->assertUnauthorized();
+        $this->getJson("/api/board-data/{$uuid}")->assertOk();
     }
 
     public function test_removing_a_data_source(): void

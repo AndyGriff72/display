@@ -5,7 +5,11 @@ namespace App\Providers;
 use App\Connections\ConnectionProvider;
 use App\Connections\SavedConnectionProvider;
 use App\Services\CredentialKeyProvider;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Encryption\Encrypter;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -34,6 +38,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Sign-in attempts, limited as Redbrix limits them: five a minute for an address and
+        // email together, twenty a minute for an address whatever email it tries.
+        RateLimiter::for('login', fn (Request $request) => [
+            Limit::perMinute(5)
+                ->by(Str::lower((string) $request->input('email')) . '|' . $request->ip())
+                ->response(fn () => back()
+                    ->withInput($request->except('password'))
+                    ->withErrors(['email' => 'Too many sign-in attempts. Please wait a minute and try again.'])),
+            Limit::perMinute(20)->by($request->ip()),
+        ]);
     }
 }
