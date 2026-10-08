@@ -17,6 +17,7 @@ import {
 import { useBoardData } from "../board/useBoardData";
 import { usePaging } from "../board/usePaging";
 import { CHARSETS, type CharsetName } from "../cells/charsets";
+import { normalizeStack } from "../cells/splitflap/flapStack";
 import { FONTS, loadFont } from "../fonts";
 import { SAMPLE_RECORDS, SAMPLES, type LayoutShape } from "./boardSamples";
 
@@ -191,7 +192,10 @@ export default function BoardEditorPage() {
     setCellHeight(cell.height);
     setFlipMs(cell.flipMs ?? 80);
     setFontId(FONTS.find((f) => f.family === cell.fontFamily)?.id ?? FONTS[0].id);
-    setStackName((Object.keys(CHARSETS) as CharsetName[]).find((k) => CHARSETS[k] === cell.stack) ?? "standard");
+    setStackName(
+      (Object.keys(CHARSETS) as CharsetName[]).find((k) => cell.stack !== undefined && CHARSETS[k] === normalizeStack(cell.stack)) ??
+        "standard"
+    );
     setScreenSound(!!sound?.enabled);
     setVolume(sound?.volume ?? 0.5);
   };

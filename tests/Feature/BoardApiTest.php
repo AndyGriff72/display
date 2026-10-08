@@ -38,6 +38,26 @@ class BoardApiTest extends TestCase
             ->assertJsonPath('data.layout', $this->layout());
     }
 
+    public function test_keeps_spaces_and_empty_text_in_a_layout_exactly(): void
+    {
+        // The blank flap leads the stack; trimmed off, empty cells showed "A" on screens.
+        $layout = $this->layout([
+            'cell' => ['type' => 'splitflap', 'width' => 32, 'height' => 50, 'stack' => ' ABC'],
+            'fields' => [['id' => 'platform', 'area' => '4,0 to 23,0', 'text' => ' PLATFORM {platform} ']],
+            'lists' => [['id' => 'deps', 'area' => '4,1 to 23,3', 'columns' => [['title' => '', 'text' => '{destination}']]]],
+        ]);
+
+        $id = $this->postJson('/api/boards', ['name' => 'Concourse', 'layout' => $layout])->assertOk()->json('data.id');
+
+        $saved = Board::findOrFail($id)->layout;
+        $this->assertSame(' ABC', $saved['cell']['stack']);
+        $this->assertSame(' PLATFORM {platform} ', $saved['fields'][0]['text']);
+        $this->assertSame('', $saved['lists'][0]['columns'][0]['title']);
+
+        $this->putJson("/api/boards/{$id}", ['name' => 'Concourse', 'layout' => $layout])->assertOk();
+        $this->assertSame(' ABC', Board::findOrFail($id)->layout['cell']['stack']);
+    }
+
     public function test_lists_boards_by_name_without_their_layouts(): void
     {
         Board::create(['name' => 'Platform 2', 'layout' => $this->layout()]);

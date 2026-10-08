@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { CHARSETS } from "../charsets";
 import type { CellProps } from "../types";
-import { flapIndex, nextFlap } from "./flapStack";
+import { flapIndex, nextFlap, normalizeStack } from "./flapStack";
 import "./SplitFlapCell.css";
 
 export interface SplitFlapCellProps extends CellProps {
@@ -24,12 +24,13 @@ export const SplitFlapCell = memo(function SplitFlapCell({
   fontSize,
   fontFamily,
   color,
-  stack = CHARSETS.standard,
+  stack: givenStack = CHARSETS.standard,
   flipMs = 80,
   onFlap,
   className,
   style,
 }: SplitFlapCellProps) {
+  const stack = normalizeStack(givenStack);
   const target = flapIndex(char, stack);
   // Starts on the blank, as a board does when it is switched on.
   const [shown, setShown] = useState(0);

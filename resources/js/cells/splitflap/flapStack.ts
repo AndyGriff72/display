@@ -4,6 +4,16 @@
  */
 
 /**
+ * A stack with its blank flap first, where every cell starts and where anything the stack
+ * cannot print ends up. A stack that has lost its blank (boards saved before the server stopped
+ * trimming spaces from layouts lost theirs) gets one back, at the front; one with a blank
+ * elsewhere has it moved there.
+ */
+export function normalizeStack(stack: string): string {
+  return stack.startsWith(" ") ? stack : " " + stack.replaceAll(" ", "");
+}
+
+/**
  * Where `char` sits in the stack. Characters the stack has no flap for fall back to the
  * upper-case flap if there is one (most stacks are upper-case only), then to the first
  * flap, the blank, the same as a real board shows for anything it cannot print.

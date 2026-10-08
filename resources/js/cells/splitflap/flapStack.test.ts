@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flapIndex, flipsBetween, nextFlap } from "./flapStack";
+import { flapIndex, flipsBetween, nextFlap, normalizeStack } from "./flapStack";
 
 const STACK = " ABC123";
 
@@ -35,5 +35,20 @@ describe("flipsBetween", () => {
 
   it("is zero when already there", () => {
     expect(flipsBetween(2, 2, STACK)).toBe(0);
+  });
+});
+
+describe("normalizeStack", () => {
+  it("leaves a stack that starts with its blank alone", () => {
+    expect(normalizeStack(STACK)).toBe(STACK);
+  });
+
+  it("puts back a blank that was trimmed off, so empty cells show blank, not the first letter", () => {
+    expect(normalizeStack("ABC123")).toBe(" ABC123");
+    expect(flapIndex(" ", normalizeStack("ABC123"))).toBe(0);
+  });
+
+  it("moves a blank from elsewhere to the front", () => {
+    expect(normalizeStack("AB C")).toBe(" ABC");
   });
 });
