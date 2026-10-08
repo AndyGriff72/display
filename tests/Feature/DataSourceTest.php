@@ -202,7 +202,7 @@ class DataSourceTest extends TestCase
 
         $this->getJson('/api/board-data/' . $saved['uuid'])
             ->assertOk()
-            ->assertJson(['status' => 200, 'data' => [['destination' => 'GLASGOW']], 'columns' => ['destination'], 'stale' => false]);
+            ->assertJson(['status' => 200, 'data' => [['destination' => 'GLASGOW']], 'columns' => ['destination'], 'stale' => false, 'refreshSeconds' => 30]);
 
         $this->getJson('/api/board-data/' . $saved['id'])->assertNotFound();
     }

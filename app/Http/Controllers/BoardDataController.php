@@ -9,7 +9,10 @@ use Illuminate\Http\JsonResponse;
 /**
  * The rows a screen shows, in Redbrix's envelope:
  *
- *   { status, data: [ { column: value, ... }, ... ], columns, fetchedAt, stale, message }
+ *   { status, data: [ { column: value, ... }, ... ], columns, fetchedAt, stale, refreshSeconds, message }
+ *
+ * refreshSeconds tells a screen how often to ask again: the data source's cache period, since
+ * asking more often would only be handed the same result.
  *
  * Open to any screen, because screens do not sign in; what it serves is what the board puts on
  * public display anyway. The address uses the data source's random key, not its id. Failures are
@@ -45,6 +48,7 @@ class BoardDataController extends Controller
             'columns' => $result['columns'],
             'fetchedAt' => $result['fetchedAt'],
             'stale' => $result['stale'],
+            'refreshSeconds' => $source->cache_seconds,
             'message' => '',
         ]);
     }

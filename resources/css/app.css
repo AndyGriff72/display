@@ -345,3 +345,17 @@ code {
   color: #aaa;
   font-weight: 600;
 }
+
+.bound-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.bound-field code {
+  padding: 6px 10px;
+  background: #1b1c1e;
+  border: 1px dashed #444;
+  border-radius: 6px;
+}

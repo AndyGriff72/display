@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeBoard, parseArea, validateLayout, type BoardLayout } from "./layout";
+import { composeBoard, parseArea, validateLayout, wrapLine, type BoardLayout } from "./layout";
 
 const cell = { type: "splitflap", width: 30, height: 50 } as const;
 
@@ -64,6 +64,13 @@ describe("validateLayout", () => {
     ]);
   });
 
+  it("reports a data row that is not a whole number from 0", () => {
+    expect(validateLayout({ ...base, fields: [{ id: "dest", area: "0,0 to 9,0", text: "{destination}", row: -1 }] })).toEqual([
+      'Field "dest": row must be a whole number, counting from 0 for the first row of data.',
+    ]);
+    expect(validateLayout({ ...base, fields: [{ id: "dest", area: "0,0 to 9,0", text: "{destination}", row: 2 }] })).toEqual([]);
+  });
+
   it("reports an image fit it does not know", () => {
     const errors = validateLayout({
       ...base,
@@ -82,6 +89,20 @@ describe("validateLayout", () => {
     });
     expect(errors).toContain('Static area "a": another area already has that id.');
     expect(errors).toContain('"a" and "a" overlap.');
+  });
+});
+
+describe("wrapLine", () => {
+  it("leaves a line that fits alone", () => {
+    expect(wrapLine("CREWE", 10)).toEqual(["CREWE"]);
+  });
+
+  it("wraps at spaces", () => {
+    expect(wrapLine("PRESTON, LANCASTER, OXENHOLME", 20)).toEqual(["PRESTON, LANCASTER,", "OXENHOLME"]);
+  });
+
+  it("splits a word too long for the width", () => {
+    expect(wrapLine("ABCDEFGHIJ KL", 4)).toEqual(["ABCD", "EFGH", "IJ", "KL"]);
   });
 });
 
@@ -116,6 +137,18 @@ describe("composeBoard", () => {
   it("centres text", () => {
     const cells = composeBoard({ ...layout, fields: [{ id: "c", area: "2,0 to 5,0", align: "center" }] }, { c: "X" });
     expect(row(cells, 0)).toBe("## X  ");
+  });
+
+  it("wraps a long line onto the next row of a multi-row field, but cuts it in a single-row one", () => {
+    const multi = composeBoard(
+      { columns: 6, rows: 2, cell, fields: [{ id: "f", area: "0,0 to 5,1" }] },
+      { f: "CREWE STAFFORD RUGBY" }
+    );
+    expect(row(multi, 0)).toBe("CREWE ");
+    expect(row(multi, 1)).toBe("STAFFO");
+
+    const single = composeBoard({ columns: 6, rows: 1, cell, fields: [{ id: "f", area: "0,0 to 5,0" }] }, { f: "CREWE STAFFORD" });
+    expect(row(single, 0)).toBe("CREWE ");
   });
 
   it("puts each line of a multi-row field on its own row", () => {

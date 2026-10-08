@@ -54,11 +54,21 @@ export interface FieldArea {
   id: string;
   area: string;
   align?: "left" | "right" | "center";
+  /**
+   * What the field shows from the board's data source: text with columns in braces, e.g.
+   * "PLATFORM {platform}" or "{departs_at|HH:mm}". See binding.ts. A field without one shows
+   * whatever text it is given directly.
+   */
+  text?: string;
+  /** Which row of the data the template reads, counting from 0. Defaults to the first. */
+  row?: number;
 }
 
 export interface BoardLayout {
   columns: number;
   rows: number;
+  /** The key of the data source the board's fields read from, if any. */
+  dataSource?: string;
   cell: CellSettings;
   statics?: StaticArea[];
   fields?: FieldArea[];
@@ -160,6 +170,12 @@ export function validateLayout(layout: BoardLayout): string[] {
   for (const f of layout.fields ?? []) {
     const rect = check("Field", f.id, f.area);
     if (rect) fields.push({ id: f.id, rect });
+    if (f.text !== undefined && typeof f.text !== "string") {
+      errors.push(`Field "${f.id}": text must be written in quotes, e.g. "{destination}".`);
+    }
+    if (f.row !== undefined && !(Number.isInteger(f.row) && f.row >= 0)) {
+      errors.push(`Field "${f.id}": row must be a whole number, counting from 0 for the first row of data.`);
+    }
   }
 
   const pairs = (list: { id: string; rect: Rect }[], other: { id: string; rect: Rect }[], same: boolean) => {
@@ -182,8 +198,10 @@ export function validateLayout(layout: BoardLayout): string[] {
  * Keyed "x,y"; cells under a static area are left out, because they do not exist.
  *
  * A field's text fills its area row by row: each line of the text ("\n" separated) goes
- * on the next row of the area, cut to the area's width and aligned within it. Lines beyond
- * the area's height are dropped. Cells in no field are blank.
+ * on the next row of the area, aligned within it. In a field more than one row high, a line
+ * too long for the width wraps at spaces onto the next row, since data from a database
+ * comes as one line; in a single-row field it is cut off. Whatever does not fit in the
+ * area's height is dropped. Cells in no field are blank.
  */
 export function composeBoard(layout: BoardLayout, values: Record<string, string>): Map<string, string> {
   const statics = (layout.statics ?? []).map((s) => parseArea(s.area)).filter((r): r is Rect => !!r);
@@ -199,7 +217,9 @@ export function composeBoard(layout: BoardLayout, values: Record<string, string>
     const rect = parseArea(field.area);
     if (!rect) continue;
     const width = areaWidth(rect);
-    const lines = (values[field.id] ?? "").split("\n").slice(0, areaHeight(rect));
+    const height = areaHeight(rect);
+    const text = (values[field.id] ?? "").split("\n");
+    const lines = (height > 1 ? text.flatMap((line) => wrapLine(line, width)) : text).slice(0, height);
     lines.forEach((line, row) => {
       const text = alignLine(line, width, field.align ?? "left");
       for (let i = 0; i < width; i++) {
@@ -210,6 +230,30 @@ export function composeBoard(layout: BoardLayout, values: Record<string, string>
   }
 
   return cells;
+}
+
+/**
+ * Break a line into pieces no wider than `width`, at spaces where possible. A single word
+ * longer than the width is split where it has to be.
+ */
+export function wrapLine(line: string, width: number): string[] {
+  if (line.length <= width) return [line];
+  const pieces: string[] = [];
+  let current = "";
+  for (const word of line.split(" ").filter((w) => w !== "")) {
+    if (current && current.length + 1 + word.length <= width) {
+      current += " " + word;
+      continue;
+    }
+    if (current) pieces.push(current);
+    current = word;
+    while (current.length > width) {
+      pieces.push(current.slice(0, width));
+      current = current.slice(width);
+    }
+  }
+  if (current) pieces.push(current);
+  return pieces.length ? pieces : [""];
 }
 
 function alignLine(line: string, width: number, align: "left" | "right" | "center"): string {
