@@ -5,6 +5,7 @@ use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardDataController;
 use App\Http\Controllers\ConnectionController;
 use App\Http\Controllers\DataSourceController;
+use App\Http\Controllers\ImageController;
 use App\Http\Controllers\SchemaController;
 use App\Http\Controllers\ScreenController;
 use Illuminate\Support\Facades\Route;
@@ -40,6 +41,10 @@ Route::prefix('api')->group(function () {
         Route::get('/boards/{board}', [BoardController::class, 'show']);
         Route::put('/boards/{board}', [BoardController::class, 'update']);
         Route::delete('/boards/{board}', [BoardController::class, 'destroy']);
+
+        Route::get('/images', [ImageController::class, 'index']);
+        Route::post('/images', [ImageController::class, 'store']);
+        Route::delete('/images/{image}', [ImageController::class, 'destroy']);
     });
 
     // What screens fetch. Open, because screens do not sign in; addressed by unguessable keys.
@@ -51,8 +56,10 @@ Route::prefix('api')->group(function () {
         ->where('any', '.*');
 });
 
-// A screen is the app's page too, but open to anyone with its address.
+// A screen is the app's page too, but open to anyone with its address; so are the images
+// boards show.
 Route::get('/screen/{key}', fn () => view('app'));
+Route::get('/images/{uuid}', [ImageController::class, 'show']);
 
 // The board editor is a single-page React app; every page it routes to itself is served the
 // same shell, as Redbrix's SPA is, once signed in.

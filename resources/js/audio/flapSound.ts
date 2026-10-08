@@ -10,8 +10,8 @@
 
 import { synthesiseClickSamples, type SoundStyle } from "./clickSynth";
 
-const MIN_GAP_MS = 7;
-const VARIANTS = 6;
+const MIN_GAP_MS = 50;
+const VARIANTS = 8;
 
 class FlapSound {
   private ctx: AudioContext | null = null;
@@ -79,7 +79,7 @@ class FlapSound {
     const source = ctx.createBufferSource();
     source.buffer = this.sample ?? this.synthesised[Math.floor(Math.random() * this.synthesised.length)];
     // No two flaps sound quite the same.
-    source.playbackRate.value = 0.92 + Math.random() * 0.16;
+    source.playbackRate.value = 1.52 + Math.random() * 0.16;
     source.connect(this.output!);
     source.start(at);
   }

@@ -30,6 +30,21 @@ return [
 
     'disks' => [
 
+        // Images uploaded for boards. Private: they are only ever served through the /images
+        // route, which adds the headers that make SVG files safe to show. To keep them on S3
+        // instead (as Redbrix's servers would want), point BOARD_IMAGES_DRIVER at s3 and give
+        // the AWS settings below.
+        'board_images' => [
+            'driver' => env('BOARD_IMAGES_DRIVER', 'local'),
+            'root' => env('BOARD_IMAGES_DRIVER', 'local') === 'local' ? storage_path('app/board-images') : env('BOARD_IMAGES_PREFIX', 'board-images'),
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION'),
+            'bucket' => env('AWS_BUCKET'),
+            'throw' => true,
+            'report' => false,
+        ],
+
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),

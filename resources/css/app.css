@@ -460,3 +460,91 @@ code {
   padding: 4px 10px;
   font-size: 13px;
 }
+
+.static-panel .static-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  width: 100%;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #333;
+}
+
+.static-preview {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 72px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px #2a2a2d;
+  overflow: hidden;
+}
+
+.static-preview img {
+  width: 100%;
+  height: 100%;
+}
+
+.static-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.form label.inline,
+.controls label.inline,
+label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.image-library {
+  width: 100%;
+  font-size: 14px;
+}
+
+.image-library summary {
+  cursor: pointer;
+  color: #aaa;
+}
+
+.image-library ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.image-library li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.image-library img {
+  width: 40px;
+  height: 30px;
+  object-fit: contain;
+  background: #161618;
+  border-radius: 3px;
+}
+
+/* The static areas panel lays out row by row, unlike the Fields grid, and its inputs hold
+   names, addresses and colours rather than board text, so they keep their own case. */
+.controls fieldset.static-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.controls fieldset.static-panel input {
+  text-transform: none;
+  font-family: inherit;
+}

@@ -21,6 +21,7 @@ import { CHARSETS, type CharsetName } from "../cells/charsets";
 import { normalizeStack } from "../cells/splitflap/flapStack";
 import { FONTS, loadFont } from "../fonts";
 import { SAMPLE_RECORDS, SAMPLES, type LayoutShape } from "./boardSamples";
+import { StaticAreasPanel } from "./StaticAreasPanel";
 
 const CELL_TYPE_LABELS: Record<CellType, string> = {
   splitflap: "Split-flap",
@@ -441,6 +442,8 @@ export default function BoardEditorPage() {
             })}
           </fieldset>
         )}
+
+        <StaticAreasPanel statics={shape.statics ?? []} onChange={(statics) => replaceShape({ ...shape, statics })} />
 
         <label className="wide">
           Layout (JSON). Areas are inclusive "column,row to column,row", counting from 0,0 at the top left.
