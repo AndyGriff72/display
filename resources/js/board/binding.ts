@@ -123,14 +123,30 @@ export interface BoundField {
 }
 
 /**
+ * Where page `page` starts, when `total` records are shown `perPage` at a time. Pages loop: after
+ * the last comes the first again. Everything fits on one page when there are no more records
+ * than room for them, so nothing moves.
+ */
+export function pageOffset(total: number, perPage: number, page: number): number {
+  if (perPage <= 0 || total <= perPage) return 0;
+  const pages = Math.ceil(total / perPage);
+  return (((page % pages) + pages) % pages) * perPage;
+}
+
+/**
  * The text for every bound field, from the data source's rows. Fields with no template are left
  * out, so the caller can fill them some other way.
+ *
+ * With a page number, the fields page through the records together: a page is as many records
+ * as the highest row any field reads, so fields reading row 0 show one record per page.
  */
-export function bindFields(fields: BoundField[], rows: Row[]): Record<string, string> {
+export function bindFields(fields: BoundField[], rows: Row[], page?: number): Record<string, string> {
+  const bound = fields.filter((f) => typeof f.text === "string");
+  const perPage = Math.max(0, ...bound.map((f) => (f.row ?? 0) + 1));
+  const offset = page === undefined ? 0 : pageOffset(rows.length, perPage, page);
   const values: Record<string, string> = {};
-  for (const field of fields) {
-    if (typeof field.text !== "string") continue;
-    values[field.id] = renderTemplate(field.text, rows[field.row ?? 0]);
+  for (const field of bound) {
+    values[field.id] = renderTemplate(field.text as string, rows[offset + (field.row ?? 0)]);
   }
   return values;
 }

@@ -7,6 +7,8 @@
  * written on its own, e.g. "5,2".
  */
 
+import { pageOffset, renderTemplate, type Row } from "./binding";
+
 export const CELL_TYPES = ["splitflap", "dotmatrix", "segment"] as const;
 export type CellType = (typeof CELL_TYPES)[number];
 
@@ -64,14 +66,56 @@ export interface FieldArea {
   row?: number;
 }
 
+/** One column of a list: what it shows for each record, and how many characters wide it is. */
+export interface ListColumn {
+  /** Shown in the header row, when the list has one. */
+  title?: string;
+  /** A template, as for fields: "{destination}", "{departs_at|HH:mm}", "PLAT {platform}". */
+  text: string;
+  /** Characters. The last column may leave it out to take whatever width is left. */
+  width?: number;
+  align?: "left" | "right" | "center";
+}
+
+/**
+ * Records as rows: each board row in the area shows one record, laid out in columns, with an
+ * optional header row of column titles first. Columns are separated by one blank cell.
+ */
+export interface ListArea {
+  id: string;
+  area: string;
+  columns: ListColumn[];
+  header?: boolean;
+  /** Colour of the header row's characters. Any CSS colour; defaults to DEFAULT_HEADER_COLOR. */
+  headerColor?: string;
+}
+
+/** A warm yellow that stands apart from cream flaps, white or amber LEDs and red segments alike. */
+export const DEFAULT_HEADER_COLOR = "#ffcc33";
+
+/** How long each page of records stays up, in seconds, unless the layout says otherwise. */
+export const DEFAULT_PAGE_SECONDS = 8;
+
 export interface BoardLayout {
   columns: number;
   rows: number;
-  /** The key of the data source the board's fields read from, if any. */
+  /** The key of the data source the board's fields and lists read from, if any. */
   dataSource?: string;
+  /**
+   * When there are more records than a list has rows for, the list moves on to the next
+   * page of records this often, looping back to the first. 0 keeps the first page up.
+   * Defaults to DEFAULT_PAGE_SECONDS.
+   */
+  pageSeconds?: number;
+  /**
+   * Page the fields too, one page of records at a time (one record, when every field reads
+   * row 0). Off by default: a field reading row 0 is often deliberately "the next one".
+   */
+  pageFields?: boolean;
   cell: CellSettings;
   statics?: StaticArea[];
   fields?: FieldArea[];
+  lists?: ListArea[];
 }
 
 /** An area with its corners resolved, inclusive at both ends. */
@@ -139,11 +183,19 @@ export function validateLayout(layout: BoardLayout): string[] {
     errors.push("Segments must be 7 or 14.");
   }
 
+  if (layout.pageSeconds !== undefined && !(typeof layout.pageSeconds === "number" && layout.pageSeconds >= 0)) {
+    errors.push("pageSeconds must be a number of seconds, or 0 to stay on the first page.");
+  }
+  if (layout.pageFields !== undefined && typeof layout.pageFields !== "boolean") {
+    errors.push("pageFields must be true or false.");
+  }
+
   const seen = new Set<string>();
   const statics: { id: string; rect: Rect }[] = [];
   const fields: { id: string; rect: Rect }[] = [];
+  const lists: { id: string; rect: Rect }[] = [];
 
-  const check = (kind: "Static area" | "Field", id: string, area: string) => {
+  const check = (kind: "Static area" | "Field" | "List", id: string, area: string) => {
     if (seen.has(id)) errors.push(`${kind} "${id}": another area already has that id.`);
     seen.add(id);
     const rect = parseArea(area ?? "");
@@ -178,6 +230,12 @@ export function validateLayout(layout: BoardLayout): string[] {
     }
   }
 
+  for (const l of layout.lists ?? []) {
+    const rect = check("List", l.id, l.area);
+    if (rect) lists.push({ id: l.id, rect });
+    errors.push(...listProblems(l, rect));
+  }
+
   const pairs = (list: { id: string; rect: Rect }[], other: { id: string; rect: Rect }[], same: boolean) => {
     list.forEach((a, i) =>
       (same ? other.slice(i + 1) : other).forEach((b) => {
@@ -187,10 +245,42 @@ export function validateLayout(layout: BoardLayout): string[] {
   };
   pairs(statics, statics, true);
   pairs(fields, fields, true);
-  // A field over a static area would be writing into cells that do not exist.
+  pairs(lists, lists, true);
+  // A field or list over a static area would be writing into cells that do not exist, and two
+  // things writing into the same cells would fight over them.
   pairs(fields, statics, false);
+  pairs(lists, statics, false);
+  pairs(lists, fields, false);
 
   return errors;
+}
+
+function listProblems(list: ListArea, rect: Rect | null): string[] {
+  const name = `List "${list.id}"`;
+  if (!Array.isArray(list.columns) || list.columns.length === 0) {
+    return [`${name}: give it at least one column, e.g. { "text": "{destination}" }.`];
+  }
+  const problems: string[] = [];
+  list.columns.forEach((c, i) => {
+    const which = `${name}, column ${i + 1}`;
+    const last = i === list.columns.length - 1;
+    if (typeof c?.text !== "string") problems.push(`${which}: text must be written in quotes, e.g. "{destination}".`);
+    if (c?.width === undefined) {
+      if (!last) problems.push(`${which}: needs a width. Only the last column may take whatever is left.`);
+    } else if (!(Number.isInteger(c.width) && c.width >= 1)) {
+      problems.push(`${which}: width must be a whole number of characters.`);
+    }
+  });
+  if (rect) {
+    const needed = list.columns.reduce((sum, c) => sum + (Number.isInteger(c?.width) ? (c.width as number) : 1), 0) + list.columns.length - 1;
+    if (needed > areaWidth(rect)) {
+      problems.push(`${name}: its columns need ${needed} characters, with a space between each, but it is ${areaWidth(rect)} wide.`);
+    }
+    if (list.header && areaHeight(rect) < 2) {
+      problems.push(`${name}: with a header row it needs at least two rows, one for the header and one for a record.`);
+    }
+  }
+  return problems;
 }
 
 /**
@@ -201,9 +291,16 @@ export function validateLayout(layout: BoardLayout): string[] {
  * on the next row of the area, aligned within it. In a field more than one row high, a line
  * too long for the width wraps at spaces onto the next row, since data from a database
  * comes as one line; in a single-row field it is cut off. Whatever does not fit in the
- * area's height is dropped. Cells in no field are blank.
+ * area's height is dropped. Cells in no field or list are blank.
+ *
+ * A list shows the data's records, one per row, starting from page `page` (see pageOffset).
  */
-export function composeBoard(layout: BoardLayout, values: Record<string, string>): Map<string, string> {
+export function composeBoard(
+  layout: BoardLayout,
+  values: Record<string, string>,
+  records: Row[] = [],
+  page = 0
+): Map<string, string> {
   const statics = (layout.statics ?? []).map((s) => parseArea(s.area)).filter((r): r is Rect => !!r);
   const cells = new Map<string, string>();
 
@@ -229,7 +326,58 @@ export function composeBoard(layout: BoardLayout, values: Record<string, string>
     });
   }
 
+  for (const list of layout.lists ?? []) {
+    const rect = parseArea(list.area);
+    if (!rect || !Array.isArray(list.columns)) continue;
+    listLines(list, rect, records, page).forEach((line, row) => {
+      for (let i = 0; i < line.length; i++) {
+        const key = `${rect.x1 + i},${rect.y1 + row}`;
+        if (cells.has(key)) cells.set(key, line[i]);
+      }
+    });
+  }
+
   return cells;
+}
+
+/**
+ * The text of every row of a list, each exactly the list's width: the header, if it has one,
+ * then one record per row from the current page, then blanks for rows with no record.
+ */
+export function listLines(list: ListArea, rect: Rect, records: Row[], page: number): string[] {
+  const width = areaWidth(rect);
+  const height = areaHeight(rect);
+  const widths = columnWidths(list.columns, width);
+  const line = (texts: string[]) =>
+    alignLine(texts.map((t, i) => alignLine(t, widths[i], list.columns[i].align ?? "left")).join(" "), width, "left");
+
+  const lines: string[] = [];
+  if (list.header) lines.push(line(list.columns.map((c) => c.title ?? "")));
+  const perPage = height - lines.length;
+  const offset = pageOffset(records.length, perPage, page);
+  for (let i = 0; i < perPage; i++) {
+    const record = records[offset + i];
+    lines.push(record ? line(list.columns.map((c) => renderTemplate(String(c.text ?? ""), record))) : " ".repeat(width));
+  }
+  return lines;
+}
+
+/** Each column's width; a last column with none takes what is left of the list's width. */
+function columnWidths(columns: ListColumn[], width: number): number[] {
+  const fixed = columns.map((c) => (Number.isInteger(c.width) && (c.width as number) > 0 ? (c.width as number) : 0));
+  const used = fixed.reduce((a, b) => a + b, 0) + columns.length - 1;
+  return fixed.map((w, i) => (w === 0 ? Math.max(0, i === columns.length - 1 ? width - used : 1) : w));
+}
+
+/** Characters in a list's header rows, and the colour each should be. Keyed "x,y". */
+export function headerColours(layout: BoardLayout): Map<string, string> {
+  const colours = new Map<string, string>();
+  for (const list of layout.lists ?? []) {
+    const rect = parseArea(list.area);
+    if (!rect || !list.header) continue;
+    for (let x = rect.x1; x <= rect.x2; x++) colours.set(`${x},${rect.y1}`, list.headerColor ?? DEFAULT_HEADER_COLOR);
+  }
+  return colours;
 }
 
 /**

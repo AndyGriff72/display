@@ -2,13 +2,18 @@ import { useMemo, type CSSProperties } from "react";
 import { DotMatrixCell } from "../cells/dotmatrix/DotMatrixCell";
 import { SegmentCell } from "../cells/segment/SegmentCell";
 import { SplitFlapCell } from "../cells/splitflap/SplitFlapCell";
-import { composeBoard, parseArea, type BoardLayout, type Rect } from "./layout";
+import type { Row } from "./binding";
+import { composeBoard, headerColours, parseArea, type BoardLayout, type Rect } from "./layout";
 import "./Board.css";
 
 export interface BoardProps {
   layout: BoardLayout;
   /** Text for each field, by field id. */
   values: Record<string, string>;
+  /** The data source's records, which lists show one per row. */
+  records?: Row[];
+  /** Which page of records lists show; see pageOffset. */
+  page?: number;
   /** Called each time a flap lands anywhere on the board. */
   onFlap?: () => void;
   /** Outline the static areas and fields, with their ids, for checking a layout. */
@@ -20,11 +25,15 @@ export interface BoardProps {
  * area is placed on the same CSS grid, so a static area covers the gaps between the cells
  * it replaces and the board keeps its shape around it.
  */
-export function Board({ layout, values, onFlap, showAreas }: BoardProps) {
+export function Board({ layout, values, records = [], page = 0, onFlap, showAreas }: BoardProps) {
   const { cell } = layout;
-  const cells = useMemo(() => composeBoard(layout, values), [layout, values]);
+  const cells = useMemo(() => composeBoard(layout, values, records, page), [layout, values, records, page]);
+  const colours = useMemo(() => headerColours(layout), [layout]);
   const statics = useMemo(() => placedAreas(layout, layout.statics ?? []), [layout]);
-  const fields = useMemo(() => (showAreas ? placedAreas(layout, layout.fields ?? []) : []), [layout, showAreas]);
+  const fields = useMemo(
+    () => (showAreas ? placedAreas(layout, [...(layout.fields ?? []), ...(layout.lists ?? [])]) : []),
+    [layout, showAreas]
+  );
 
   const gridStyle: CSSProperties = {
     gridTemplateColumns: `repeat(${layout.columns}, ${cell.width}px)`,
@@ -41,7 +50,7 @@ export function Board({ layout, values, onFlap, showAreas }: BoardProps) {
           char: ch,
           width: cell.width,
           height: cell.height,
-          color: cell.color,
+          color: colours.get(key) ?? cell.color,
           style: { gridColumn: x + 1, gridRow: y + 1 },
         };
         switch (cell.type) {

@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { composeBoard, parseArea, validateLayout, wrapLine, type BoardLayout } from "./layout";
+import {
+  composeBoard,
+  DEFAULT_HEADER_COLOR,
+  headerColours,
+  parseArea,
+  validateLayout,
+  wrapLine,
+  type BoardLayout,
+  type ListArea,
+} from "./layout";
 
 const cell = { type: "splitflap", width: 30, height: 50 } as const;
 
@@ -159,5 +168,81 @@ describe("composeBoard", () => {
     expect(row(cells, 0).slice(0, 3)).toBe("AB ");
     expect(row(cells, 1).slice(0, 3)).toBe("CD ");
     expect(row(cells, 2).slice(0, 3)).toBe("   ");
+  });
+});
+
+describe("lists", () => {
+  const departures = [
+    { t: "2026-10-08 14:32:00", dest: "LONDON", plat: "4" },
+    { t: "2026-10-08 14:47:00", dest: "MANCHESTER PICCADILLY", plat: "11" },
+    { t: "2026-10-08 15:05:00", dest: "EDINBURGH", plat: null },
+  ];
+  const list: ListArea = {
+    id: "deps",
+    area: "0,0 to 15,2",
+    header: true,
+    columns: [
+      { title: "TIME", text: "{t|HH:mm}", width: 5 },
+      { title: "TO", text: "{dest}", width: 6 },
+      { title: "PLAT", text: "{plat}", align: "right" },
+    ],
+  };
+  const layout: BoardLayout = { columns: 16, rows: 3, cell, lists: [list] };
+  const lines = (page = 0, records = departures) => {
+    const cells = composeBoard(layout, {}, records, page);
+    return [0, 1, 2].map((y) => Array.from({ length: 16 }, (_, x) => cells.get(`${x},${y}`)).join(""));
+  };
+
+  it("shows a header, then one record per row in columns, cutting text to its column", () => {
+    // Widths 5 + 1 + 6 + 1, leaving 3 for the last column, which takes the rest.
+    expect(lines()).toEqual([
+      "TIME  TO     PLA",
+      "14:32 LONDON   4",
+      "14:47 MANCHE  11",
+    ]);
+  });
+
+  it("pages through records that do not fit, looping back to the first page", () => {
+    expect(lines(1)[1]).toBe("15:05 EDINBU    ");
+    expect(lines(1)[2]).toBe("                ");
+    expect(lines(2)[1]).toBe("14:32 LONDON   4");
+  });
+
+  it("stays on the first page when every record fits", () => {
+    expect(lines(1, departures.slice(0, 2))[1]).toBe("14:32 LONDON   4");
+  });
+
+  it("shows only the header when there is no data", () => {
+    expect(lines(0, [])).toEqual(["TIME  TO     PLA", " ".repeat(16), " ".repeat(16)]);
+  });
+
+  it("colours the header row", () => {
+    const colours = headerColours({ ...layout, lists: [{ ...list, headerColor: "#0f0" }] });
+    expect(colours.get("0,0")).toBe("#0f0");
+    expect(colours.get("15,0")).toBe("#0f0");
+    expect(colours.has("0,1")).toBe(false);
+    expect(headerColours(layout).get("3,0")).toBe(DEFAULT_HEADER_COLOR);
+  });
+
+  it("reports columns wider than the list, a missing width, and no room under a header", () => {
+    const base = { columns: 16, rows: 3, cell };
+    expect(validateLayout({ ...base, lists: [list] })).toEqual([]);
+    expect(validateLayout({ ...base, lists: [{ ...list, columns: [{ text: "{a}", width: 10 }, { text: "{b}", width: 10 }] }] })).toEqual([
+      'List "deps": its columns need 21 characters, with a space between each, but it is 16 wide.',
+    ]);
+    expect(validateLayout({ ...base, lists: [{ ...list, columns: [{ text: "{a}" }, { text: "{b}" }] }] })[0]).toContain(
+      "needs a width"
+    );
+    expect(validateLayout({ ...base, lists: [{ ...list, area: "0,0 to 15,0" }] })[0]).toContain("at least two rows");
+  });
+
+  it("reports a list overlapping a field", () => {
+    expect(
+      validateLayout({ columns: 16, rows: 3, cell, lists: [list], fields: [{ id: "clock", area: "10,2 to 15,2" }] })
+    ).toEqual(['"deps" and "clock" overlap.']);
+  });
+
+  it("reports a page time that is not a number of seconds", () => {
+    expect(validateLayout({ columns: 16, rows: 3, cell, pageSeconds: -1 })[0]).toContain("pageSeconds");
   });
 });

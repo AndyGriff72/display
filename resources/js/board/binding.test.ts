@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bindFields, formatValue, parseTemplate, renderTemplate, templateColumns } from "./binding";
+import { bindFields, formatValue, pageOffset, parseTemplate, renderTemplate, templateColumns } from "./binding";
 
 const row = {
   departs_at: "2026-10-08 14:32:00",
@@ -87,5 +87,37 @@ describe("bindFields", () => {
         rows
       )
     ).toEqual({ dest: "LONDON EUSTON", next: "MANCHESTER", third: "" });
+  });
+});
+
+describe("paging", () => {
+  it("finds where each page starts, looping round", () => {
+    expect(pageOffset(10, 4, 0)).toBe(0);
+    expect(pageOffset(10, 4, 1)).toBe(4);
+    expect(pageOffset(10, 4, 2)).toBe(8);
+    expect(pageOffset(10, 4, 3)).toBe(0);
+  });
+
+  it("never moves when everything fits", () => {
+    expect(pageOffset(4, 4, 7)).toBe(0);
+    expect(pageOffset(0, 4, 3)).toBe(0);
+  });
+
+  it("pages fields one record at a time when they all read row 0", () => {
+    const rows = [{ d: "A" }, { d: "B" }, { d: "C" }];
+    const fields = [{ id: "dest", text: "{d}" }];
+    expect(bindFields(fields, rows, 0)).toEqual({ dest: "A" });
+    expect(bindFields(fields, rows, 1)).toEqual({ dest: "B" });
+    expect(bindFields(fields, rows, 3)).toEqual({ dest: "A" });
+    expect(bindFields(fields, rows)).toEqual({ dest: "A" });
+  });
+
+  it("pages fields that read two rows two records at a time", () => {
+    const rows = [{ d: "A" }, { d: "B" }, { d: "C" }];
+    const fields = [
+      { id: "first", text: "{d}" },
+      { id: "second", text: "{d}", row: 1 },
+    ];
+    expect(bindFields(fields, rows, 1)).toEqual({ first: "C", second: "" });
   });
 });

@@ -1,37 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { listDataSources, type SavedDataSource } from "../api/dataSources";
 import { flapSound } from "../audio/flapSound";
-import { bindFields, templateColumns } from "../board/binding";
+import { bindFields, templateColumns, type Row } from "../board/binding";
 import { Board } from "../board/Board";
+import {
+  CELL_TYPES,
+  DEFAULT_PAGE_SECONDS,
+  parseArea,
+  validateLayout,
+  type BoardLayout,
+  type CellType,
+} from "../board/layout";
 import { useBoardData } from "../board/useBoardData";
-import { CELL_TYPES, parseArea, validateLayout, type BoardLayout, type CellType } from "../board/layout";
 import { CHARSETS, type CharsetName } from "../cells/charsets";
 import { FONTS, loadFont } from "../fonts";
-
-/** The layout's structure. Cell appearance comes from the controls below the editor. */
-type LayoutShape = Omit<BoardLayout, "cell">;
-
-const SAMPLE_LAYOUT: LayoutShape = {
-  columns: 24,
-  rows: 4,
-  statics: [{ id: "logo", area: "0,0 to 3,3", image: "/sample-logo.svg", padding: 16, background: "#1f3a6b" }],
-  // The templates match the sample departures table (database/samples/departures.mysql.sql).
-  // They are used once a data source is chosen; until then the fields show typed text.
-  fields: [
-    { id: "time", area: "4,0 to 8,0", text: "{departs_at|HH:mm}" },
-    { id: "destination", area: "10,0 to 23,0", text: "{destination}" },
-    { id: "calling", area: "4,1 to 23,2", text: "{calling_at}" },
-    { id: "platform", area: "4,3 to 14,3", text: "PLATFORM {platform}" },
-    { id: "status", area: "15,3 to 23,3", align: "right", text: "{status}" },
-  ],
-};
-
-const DEPARTURES: Record<string, string>[] = [
-  { time: "14:32", destination: "LONDON EUSTON", calling: "CREWE, STAFFORD,\nMILTON KEYNES", platform: "PLATFORM 4", status: "ON TIME" },
-  { time: "14:47", destination: "MANCHESTER", calling: "WARRINGTON BANK QUAY", platform: "PLATFORM 11", status: "DELAYED" },
-  { time: "15:05", destination: "EDINBURGH", calling: "CARLISLE,\nLOCKERBIE", platform: "PLATFORM 2", status: "BOARDING" },
-  { time: "15:20", destination: "GLASGOW", calling: "PRESTON, LANCASTER,\nOXENHOLME, PENRITH", platform: "PLATFORM 9", status: "CANCELLED" },
-];
+import { SAMPLE_RECORDS, SAMPLES, type LayoutShape } from "./boardSamples";
 
 const CELL_TYPE_LABELS: Record<CellType, string> = {
   splitflap: "Split-flap",
@@ -54,22 +37,28 @@ const COLOUR_PRESETS = [
   { label: "Blue", value: "#3fa9ff" },
 ];
 
+/** Where the board's records come from, besides a saved data source. */
+const BUILT_IN = "__sample__";
+const TYPED = "__typed__";
+
 const playFlap = () => flapSound.play();
 
 export default function BoardEditorPage() {
-  const [layoutText, setLayoutText] = useState(() => JSON.stringify(SAMPLE_LAYOUT, null, 2));
-  const [shape, setShape] = useState<LayoutShape>(SAMPLE_LAYOUT);
+  const [layoutText, setLayoutText] = useState(() => JSON.stringify(SAMPLES[0].layout, null, 2));
+  const [shape, setShape] = useState<LayoutShape>(SAMPLES[0].layout);
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [values, setValues] = useState(DEPARTURES[0]);
-  const [departure, setDeparture] = useState(0);
-  const [showAreas, setShowAreas] = useState(true);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [showAreas, setShowAreas] = useState(false);
   const [dataSources, setDataSources] = useState<SavedDataSource[]>([]);
+  // The built-in sample records, typed text, or (when the layout names one) a saved data source.
+  const [feed, setFeed] = useState<typeof BUILT_IN | typeof TYPED>(BUILT_IN);
+  const [page, setPage] = useState(0);
 
   const [cellType, setCellType] = useState<CellType>("splitflap");
   const [colour, setColour] = useState(DEFAULT_COLOURS.splitflap);
   const [segments, setSegments] = useState<7 | 14>(14);
-  const [cellWidth, setCellWidth] = useState(32);
-  const [cellHeight, setCellHeight] = useState(50);
+  const [cellWidth, setCellWidth] = useState(SAMPLES[0].cellWidth);
+  const [cellHeight, setCellHeight] = useState(SAMPLES[0].cellHeight);
   const [flipMs, setFlipMs] = useState(80);
   const [fontId, setFontId] = useState(FONTS[0].id);
   const [stackName, setStackName] = useState<CharsetName>("standard");
@@ -85,31 +74,62 @@ export default function BoardEditorPage() {
 
   const data = useBoardData(shape.dataSource);
   const source = dataSources.find((s) => s.uuid === shape.dataSource);
+  const records: Row[] = shape.dataSource ? data.rows : feed === BUILT_IN ? SAMPLE_RECORDS : [];
+  const usingData = !!shape.dataSource || feed === BUILT_IN;
   const fields = shape.fields ?? [];
-  const bound = (f: { text?: unknown }) => !!shape.dataSource && typeof f.text === "string";
+  const bound = (f: { text?: unknown }) => usingData && typeof f.text === "string";
 
-  // Bound fields take their text from the data; the rest keep what was typed.
+  // Move on a page every pageSeconds. Lists only move when they have more records than rows.
+  const pageSeconds = typeof shape.pageSeconds === "number" ? shape.pageSeconds : DEFAULT_PAGE_SECONDS;
+  useEffect(() => {
+    setPage(0);
+    if (!(pageSeconds > 0)) return;
+    const timer = window.setInterval(() => setPage((p) => p + 1), pageSeconds * 1000);
+    return () => window.clearInterval(timer);
+  }, [pageSeconds, shape.dataSource, feed]);
+
+  // Bound fields take their text from the records; the rest keep what was typed.
   const boardValues = useMemo(
-    () => (shape.dataSource ? { ...values, ...bindFields(fields.filter(bound), data.rows) } : values),
+    () =>
+      usingData ? { ...values, ...bindFields(fields.filter(bound), records, shape.pageFields ? page : undefined) } : values,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [shape, values, data.rows]
+    [shape, values, records, page, usingData]
   );
 
   // Columns the templates use that the data does not have: almost always a typing mistake.
   const missingColumns = useMemo(() => {
     if (!shape.dataSource || data.columns.length === 0) return [];
     const have = new Set(data.columns);
-    const used = fields.filter(bound).flatMap((f) => templateColumns(f.text as string));
-    return [...new Set(used)].filter((c) => !have.has(c));
+    const templates = [
+      ...fields.filter(bound).map((f) => f.text as string),
+      ...(shape.lists ?? []).flatMap((l) => (Array.isArray(l.columns) ? l.columns.map((c) => String(c.text ?? "")) : [])),
+    ];
+    return [...new Set(templates.flatMap(templateColumns))].filter((c) => !have.has(c));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shape, data.columns]);
 
-  const chooseDataSource = (key: string) => {
-    const { dataSource: _old, ...rest } = shape;
-    const next: LayoutShape = key ? { ...rest, dataSource: key } : rest;
+  const replaceShape = (next: LayoutShape) => {
     setShape(next);
     setLayoutText(JSON.stringify(next, null, 2));
     setJsonError(null);
+  };
+
+  const chooseFeed = (value: string) => {
+    const { dataSource: _old, ...rest } = shape;
+    if (value === BUILT_IN || value === TYPED) {
+      setFeed(value);
+      replaceShape(rest);
+    } else {
+      replaceShape({ ...rest, dataSource: value });
+    }
+  };
+
+  const loadSample = (id: string) => {
+    const sample = SAMPLES.find((s) => s.id === id);
+    if (!sample) return;
+    replaceShape(shape.dataSource ? { ...sample.layout, dataSource: shape.dataSource } : sample.layout);
+    setCellWidth(sample.cellWidth);
+    setCellHeight(sample.cellHeight);
   };
 
   const font = FONTS.find((f) => f.id === fontId) ?? FONTS[0];
@@ -160,23 +180,29 @@ export default function BoardEditorPage() {
     }
   };
 
-  const nextDeparture = () => {
-    const next = (departure + 1) % DEPARTURES.length;
-    setDeparture(next);
-    setValues(DEPARTURES[next]);
-  };
-
   return (
     <main className="app">
       <div className="board-wrap">
-        <Board layout={layout} values={boardValues} onFlap={playFlap} showAreas={showAreas} />
+        <Board layout={layout} values={boardValues} records={records} page={page} onFlap={playFlap} showAreas={showAreas} />
       </div>
 
       <section className="controls">
-        <label className="wide">
-          Data source
-          <select value={shape.dataSource ?? ""} onChange={(e) => chooseDataSource(e.target.value)}>
-            <option value="">None: show the text typed below</option>
+        <label>
+          Start from a sample
+          <select value="" onChange={(e) => loadSample(e.target.value)}>
+            <option value="">Choose…</option>
+            {SAMPLES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Data
+          <select value={shape.dataSource ?? feed} onChange={(e) => chooseFeed(e.target.value)}>
+            <option value={BUILT_IN}>Built-in sample departures</option>
+            <option value={TYPED}>None: show the text typed below</option>
             {dataSources.map((s) => (
               <option key={s.uuid} value={s.uuid}>
                 {s.name}
@@ -186,9 +212,15 @@ export default function BoardEditorPage() {
           </select>
         </label>
         {shape.dataSource && <DataStatus data={data} name={source?.name} missing={missingColumns} />}
+        {usingData && (
+          <p className="hint wide">
+            {pageSeconds > 0
+              ? `Pages of records change every ${pageSeconds} seconds${shape.pageFields ? ", for fields as well as lists" : ""}.`
+              : "Paging is off: the first page of records stays up."}
+          </p>
+        )}
 
         <div className="buttons wide">
-          {!shape.dataSource && <button onClick={nextDeparture}>Next departure</button>}
           <button onClick={toggleSound}>{soundOn ? "Sound off" : "Sound on"}</button>
           <label className="check">
             <input type="checkbox" checked={showAreas} onChange={(e) => setShowAreas(e.target.checked)} />
@@ -196,39 +228,39 @@ export default function BoardEditorPage() {
           </label>
         </div>
 
-        <fieldset className="wide">
-          <legend>Fields</legend>
-          {fields.map((f) => {
-            const rect = parseArea(f.area ?? "");
-            const multiRow = !!rect && rect.y2 > rect.y1;
-            const set = (v: string) => setValues((old) => ({ ...old, [f.id]: v }));
-            if (bound(f)) {
+        {fields.length > 0 && (
+          <fieldset className="wide">
+            <legend>Fields</legend>
+            {fields.map((f) => {
+              const rect = parseArea(f.area ?? "");
+              const multiRow = !!rect && rect.y2 > rect.y1;
+              const set = (v: string) => setValues((old) => ({ ...old, [f.id]: v }));
+              if (bound(f)) {
+                return (
+                  <div key={f.id} className="bound-field">
+                    <span>
+                      {f.id} <span className="hint">{f.area}</span>
+                    </span>
+                    <code>{f.text}</code>
+                    <span className="hint">shows: {boardValues[f.id] ? `"${boardValues[f.id]}"` : "nothing"}</span>
+                  </div>
+                );
+              }
               return (
-                <div key={f.id} className="bound-field">
+                <label key={f.id}>
                   <span>
                     {f.id} <span className="hint">{f.area}</span>
                   </span>
-                  <code>{f.text}</code>
-                  <span className="hint">
-                    from row {(f.row ?? 0) + 1} of the data: {boardValues[f.id] ? `"${boardValues[f.id]}"` : "nothing"}
-                  </span>
-                </div>
+                  {multiRow ? (
+                    <textarea rows={2} value={values[f.id] ?? ""} onChange={(e) => set(e.target.value)} />
+                  ) : (
+                    <input value={values[f.id] ?? ""} onChange={(e) => set(e.target.value)} />
+                  )}
+                </label>
               );
-            }
-            return (
-              <label key={f.id}>
-                <span>
-                  {f.id} <span className="hint">{f.area}</span>
-                </span>
-                {multiRow ? (
-                  <textarea rows={2} value={values[f.id] ?? ""} onChange={(e) => set(e.target.value)} />
-                ) : (
-                  <input value={values[f.id] ?? ""} onChange={(e) => set(e.target.value)} />
-                )}
-              </label>
-            );
-          })}
-        </fieldset>
+            })}
+          </fieldset>
+        )}
 
         <label className="wide">
           Layout (JSON). Areas are inclusive "column,row to column,row", counting from 0,0 at the top left.
