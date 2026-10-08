@@ -72,7 +72,10 @@ export function StaticAreasPanel({ statics, onChange }: { statics: StaticArea[];
 
       {statics.map((s, i) => (
         <div className="static-row" key={i}>
-          <div className="static-preview" style={{ background: s.background ?? "#161618" }}>
+          <div
+            className="static-preview"
+            style={{ background: s.background ?? "#0c0c0d", border: s.border ? `${s.borderWidth ?? 1}px solid ${s.border}` : undefined }}
+          >
             {s.image ? <img src={s.image} alt="" style={{ objectFit: s.fit ?? "contain" }} /> : <span className="hint">no image</span>}
           </div>
           <div className="static-controls">
@@ -103,14 +106,22 @@ export function StaticAreasPanel({ statics, onChange }: { statics: StaticArea[];
                   style={{ width: 64 }}
                 />
               </label>
-              <label className="inline">
-                Background
-                <input type="color" value={s.background ?? "#161618"} onChange={(e) => update(i, { background: e.target.value })} />
-              </label>
-              {s.background && (
-                <button className="icon" title="Back to the board's own panel colour" onClick={() => update(i, { background: undefined })}>
-                  ↺
-                </button>
+            </div>
+            <div className="row-editor">
+              <OptionalColour label="Background" value={s.background} fallback="#1f3a6b" onChange={(background) => update(i, { background })} />
+              <OptionalColour label="Border" value={s.border} fallback="#8a8a8a" onChange={(border) => update(i, { border })} />
+              {s.border && (
+                <label className="inline">
+                  Width
+                  <input
+                    type="number"
+                    min={1}
+                    max={40}
+                    value={s.borderWidth ?? 1}
+                    onChange={(e) => update(i, { borderWidth: Number(e.target.value) > 1 ? Number(e.target.value) : undefined })}
+                    style={{ width: 56 }}
+                  />
+                </label>
               )}
             </div>
           </div>
@@ -211,10 +222,34 @@ function ImageChooser({
   );
 }
 
+/**
+ * A colour that may be left out: a switch to have one at all, and the colour when it is on.
+ * (A colour picker always shows some colour, so it cannot say "none" by itself.)
+ */
+function OptionalColour({
+  label,
+  value,
+  fallback,
+  onChange,
+}: {
+  label: string;
+  value?: string;
+  fallback: string;
+  onChange: (colour: string | undefined) => void;
+}) {
+  return (
+    <label className="inline optional-colour">
+      <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked ? fallback : undefined)} />
+      {label}
+      {value && <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label={`${label} colour`} />}
+    </label>
+  );
+}
+
 /** Leave settings that have been cleared out of the layout, rather than saving them empty. */
 function withoutEmpty(s: StaticArea): StaticArea {
   const out = { ...s } as Record<string, unknown>;
-  for (const key of ["image", "fit", "padding", "background"]) {
+  for (const key of ["image", "fit", "padding", "background", "border", "borderWidth"]) {
     if (out[key] === undefined || out[key] === "") delete out[key];
   }
   return out as unknown as StaticArea;

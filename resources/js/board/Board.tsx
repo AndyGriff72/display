@@ -71,8 +71,12 @@ export function Board({ layout, values, records = [], page = 0, onFlap, showArea
             );
         }
       })}
-      {statics.map(({ id, rect, image, fit, padding, background }) => (
-        <div key={id} className="board-static" style={{ ...gridArea(rect), padding, background }}>
+      {statics.map(({ id, rect, image, fit, padding, background, border, borderWidth }) => (
+        <div
+          key={id}
+          className="board-static"
+          style={{ ...gridArea(rect), padding, background, border: border ? `${borderWidth ?? 1}px solid ${border}` : undefined }}
+        >
           {image && <img className="board-static-image" src={image} alt="" style={{ objectFit: fit ?? "contain" }} />}
           {showAreas && <span className="board-area-label">{id}</span>}
         </div>

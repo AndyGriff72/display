@@ -167,7 +167,27 @@ describe("composeBoard", () => {
     );
     expect(row(cells, 0).slice(0, 3)).toBe("AB ");
     expect(row(cells, 1).slice(0, 3)).toBe("CD ");
-    expect(row(cells, 2).slice(0, 3)).toBe("   ");
+    // Row 2 is outside the field: no cells at all.
+    expect(row(cells, 2).slice(0, 3)).toBe("###");
+  });
+
+  it("gives cells only to fields and lists, so a list starting at row 1 leaves row 0 bare", () => {
+    const cells = composeBoard(
+      { columns: 4, rows: 3, cell, lists: [{ id: "l", area: "0,1 to 3,2", columns: [{ text: "{a}" }] }] },
+      {},
+      [{ a: "AB" }]
+    );
+    expect(row(cells, 0).slice(0, 4)).toBe("####");
+    expect(row(cells, 1).slice(0, 4)).toBe("AB  ");
+    expect(cells.size).toBe(8);
+  });
+
+  it("fills unused positions with blank cells when the layout asks for them", () => {
+    const layout: BoardLayout = { columns: 4, rows: 2, cell, unusedCells: "blank", statics: [{ id: "s", area: "3,0 to 3,1" }], fields: [{ id: "f", area: "0,0 to 2,0" }] };
+    const cells = composeBoard(layout, { f: "XY" });
+    expect(row(cells, 0).slice(0, 4)).toBe("XY #");
+    expect(row(cells, 1).slice(0, 4)).toBe("   #");
+    expect(validateLayout({ ...layout, unusedCells: "full" as "blank" })).toEqual(['unusedCells must be "empty" or "blank".']);
   });
 });
 

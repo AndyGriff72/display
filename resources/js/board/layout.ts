@@ -34,7 +34,7 @@ export interface CellSettings {
   segments?: 7 | 14;
 }
 
-/** A fixed part of the board. It has no character cells; it will hold fixed graphics. */
+/** A fixed part of the board, with no character cells: a logo or other image. */
 export interface StaticArea {
   id: string;
   area: string;
@@ -48,8 +48,12 @@ export interface StaticArea {
   fit?: "contain" | "cover" | "fill";
   /** Space between the image and the area's edge, in pixels. */
   padding?: number;
-  /** Any CSS colour. Defaults to the board's static panel colour. */
+  /** Any CSS colour. Without one the area is transparent: the board shows through. */
   background?: string;
+  /** Colour of a border round the area, any CSS colour. Without one there is no border. */
+  border?: string;
+  /** Border width in pixels, when there is a border. Defaults to 1. */
+  borderWidth?: number;
 }
 
 /** A named part of the board that data is written into, e.g. "destination" or "platform". */
@@ -113,6 +117,12 @@ export interface BoardLayout {
    * row 0). Off by default: a field reading row 0 is often deliberately "the next one".
    */
   pageFields?: boolean;
+  /**
+   * What the board shows where there is no field, list or static area. "empty" (the default)
+   * leaves the space bare; "blank" fills it with blank cells, as a real board's unused
+   * positions are.
+   */
+  unusedCells?: "empty" | "blank";
   /**
    * The flap sound on screens showing the board. Browsers only allow sound once someone has
    * clicked or tapped the page, so a screen plays it from its first tap.
@@ -194,6 +204,9 @@ export function validateLayout(layout: BoardLayout): string[] {
   }
   if (layout.pageFields !== undefined && typeof layout.pageFields !== "boolean") {
     errors.push("pageFields must be true or false.");
+  }
+  if (layout.unusedCells !== undefined && layout.unusedCells !== "empty" && layout.unusedCells !== "blank") {
+    errors.push('unusedCells must be "empty" or "blank".');
   }
 
   const seen = new Set<string>();
@@ -297,7 +310,10 @@ function listProblems(list: ListArea, rect: Rect | null): string[] {
  * on the next row of the area, aligned within it. In a field more than one row high, a line
  * too long for the width wraps at spaces onto the next row, since data from a database
  * comes as one line; in a single-row field it is cut off. Whatever does not fit in the
- * area's height is dropped. Cells in no field or list are blank.
+ * area's height is dropped.
+ *
+ * Only fields and lists have cells: the rest of the board is empty, unless the layout's
+ * unusedCells is "blank", which fills it with blank cells as a real board's unused positions are.
  *
  * A list shows the data's records, one per row, starting from page `page` (see pageOffset).
  */
@@ -308,11 +324,16 @@ export function composeBoard(
   page = 0
 ): Map<string, string> {
   const statics = (layout.statics ?? []).map((s) => parseArea(s.area)).filter((r): r is Rect => !!r);
+  const used = [...(layout.fields ?? []), ...(layout.lists ?? [])]
+    .map((a) => parseArea(a.area ?? ""))
+    .filter((r): r is Rect => !!r);
+  const fillUnused = layout.unusedCells === "blank";
   const cells = new Map<string, string>();
 
   for (let y = 0; y < layout.rows; y++) {
     for (let x = 0; x < layout.columns; x++) {
-      if (!statics.some((r) => contains(r, x, y))) cells.set(`${x},${y}`, " ");
+      if (statics.some((r) => contains(r, x, y))) continue;
+      if (fillUnused || used.some((r) => contains(r, x, y))) cells.set(`${x},${y}`, " ");
     }
   }
 

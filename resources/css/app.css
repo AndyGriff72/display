@@ -602,3 +602,12 @@ code.chip {
   font-size: 13px;
   line-height: 1.5;
 }
+
+.optional-colour input[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: none;
+}

@@ -401,6 +401,17 @@ export default function BoardEditorPage() {
             <input type="checkbox" checked={showAreas} onChange={(e) => setShowAreas(e.target.checked)} />
             Outline areas
           </label>
+          <label className="check" title="Positions outside every field, list and static area">
+            <input
+              type="checkbox"
+              checked={shape.unusedCells === "blank"}
+              onChange={(e) => {
+                const { unusedCells: _old, ...rest } = shape;
+                replaceShape(e.target.checked ? { ...rest, unusedCells: "blank" } : rest);
+              }}
+            />
+            Blank cells in unused positions
+          </label>
         </div>
 
         {fields.length > 0 && (
