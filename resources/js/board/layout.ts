@@ -7,6 +7,7 @@
  * written on its own, e.g. "5,2".
  */
 
+import type { SoundStyle } from "../audio/clickSynth";
 import { pageOffset, renderTemplate, type Row } from "./binding";
 
 export const CELL_TYPES = ["splitflap", "dotmatrix", "segment"] as const;
@@ -116,7 +117,7 @@ export interface BoardLayout {
    * The flap sound on screens showing the board. Browsers only allow sound once someone has
    * clicked or tapped the page, so a screen plays it from its first tap.
    */
-  sound?: { enabled?: boolean; volume?: number };
+  sound?: { enabled?: boolean; volume?: number; style?: SoundStyle };
   cell: CellSettings;
   statics?: StaticArea[];
   fields?: FieldArea[];

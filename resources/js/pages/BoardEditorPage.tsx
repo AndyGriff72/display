@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { deleteBoard, getBoard, listBoards, saveBoard, type BoardSummary } from "../api/boards";
 import { apiError } from "../api/client";
 import { listDataSources, type SavedDataSource } from "../api/dataSources";
+import { SOUND_STYLE_LABELS, SOUND_STYLES, type SoundStyle } from "../audio/clickSynth";
 import { flapSound } from "../audio/flapSound";
 import { bindFields, templateColumns, type Row } from "../board/binding";
 import { Board } from "../board/Board";
@@ -85,6 +86,7 @@ export default function BoardEditorPage() {
   const [stackName, setStackName] = useState<CharsetName>("standard");
   // Saved with the board: whether it makes the flap sound, here and on screens.
   const [soundOn, setSoundOn] = useState(false);
+  const [soundStyle, setSoundStyle] = useState<SoundStyle>("slap");
   const [volume, setVolume] = useState(0.5);
 
   // The data sources to choose from. None (or no connection yet) just leaves the list empty.
@@ -174,8 +176,8 @@ export default function BoardEditorPage() {
 
   // Everything that is saved: the layout, its appearance and the screens' sound.
   const fullLayout: BoardLayout = useMemo(
-    () => ({ ...layout, sound: { enabled: soundOn, volume } }),
-    [layout, soundOn, volume]
+    () => ({ ...layout, sound: { enabled: soundOn, volume, style: soundStyle } }),
+    [layout, soundOn, volume, soundStyle]
   );
   const current = snapshot(name.trim(), fullLayout);
   const dirty = savedSnapshot === null || current !== savedSnapshot;
@@ -197,6 +199,7 @@ export default function BoardEditorPage() {
         "standard"
     );
     setSoundOn(!!sound?.enabled);
+    setSoundStyle(sound?.style && SOUND_STYLES.includes(sound.style) ? sound.style : "slap");
     setVolume(sound?.volume ?? 0.5);
   };
 
@@ -313,6 +316,7 @@ export default function BoardEditorPage() {
     else flapSound.disable();
   }, [soundOn]);
   useEffect(() => () => flapSound.disable(), []);
+  useEffect(() => flapSound.setStyle(soundStyle), [soundStyle]);
 
   return (
     <main className="app">
@@ -384,6 +388,14 @@ export default function BoardEditorPage() {
 
         <div className="buttons wide">
           <Switch checked={soundOn} onChange={setSoundOn} label="Flap sound" />
+          <select value={soundStyle} onChange={(e) => setSoundStyle(e.target.value as SoundStyle)} aria-label="Sound style">
+            {SOUND_STYLES.map((s) => (
+              <option key={s} value={s}>
+                {SOUND_STYLE_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <button onClick={() => flapSound.audition()}>Hear it</button>
           <label className="check">
             <input type="checkbox" checked={showAreas} onChange={(e) => setShowAreas(e.target.checked)} />
             Outline areas

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { synthesiseClickSamples } from "./clickSynth";
+import { SOUND_STYLES, synthesiseClickSamples, type SoundStyle } from "./clickSynth";
 
 const RATE = 44100;
 
-/** A repeatable stand-in for Math.random, so every run measures the same clicks. */
+/** A repeatable stand-in for Math.random, so every run measures the same sounds. */
 function seeded(seed: number): () => number {
   let s = seed;
   return () => {
@@ -12,7 +12,7 @@ function seeded(seed: number): () => number {
   };
 }
 
-/** Energy at each frequency, by a plain discrete Fourier transform (clicks are short). */
+/** Energy at each frequency, by a plain discrete Fourier transform (the sounds are short). */
 function spectrum(samples: Float32Array): { hz: number; energy: number }[] {
   const n = samples.length;
   const bins: { hz: number; energy: number }[] = [];
@@ -32,35 +32,60 @@ function spectrum(samples: Float32Array): { hz: number; energy: number }[] {
 function measure(samples: Float32Array) {
   const bins = spectrum(samples);
   const total = bins.reduce((s, b) => s + b.energy, 0);
+  const share = (lo: number, hi: number) => bins.filter((b) => b.hz >= lo && b.hz < hi).reduce((s, b) => s + b.energy, 0) / total;
+  // Within the band that carries the sound, how even the spectrum is: near 1 for noise, near 0
+  // for a few pure tones. A slap is noise-like; a click rings.
+  const band = bins.filter((b) => b.hz >= 500 && b.hz < 8000).map((b) => b.energy + 1e-12);
+  const flatness = Math.exp(band.reduce((s, e) => s + Math.log(e), 0) / band.length) / (band.reduce((s, e) => s + e, 0) / band.length);
   return {
     centroid: bins.reduce((s, b) => s + b.hz * b.energy, 0) / total,
-    above4k: bins.filter((b) => b.hz >= 4000).reduce((s, b) => s + b.energy, 0) / total,
-    below500: bins.filter((b) => b.hz < 500).reduce((s, b) => s + b.energy, 0) / total,
+    midBand: share(1000, 4000),
+    below500: share(0, 500),
+    flatness,
   };
 }
 
-describe("the flap's click", () => {
-  const clicks = [1, 2, 3, 4].map((seed) => measure(synthesiseClickSamples(RATE, seeded(seed))));
-  const average = (key: keyof (typeof clicks)[number]) => clicks.reduce((s, c) => s + c[key], 0) / clicks.length;
+function averaged(style: SoundStyle) {
+  const runs = [1, 2, 3, 4].map((seed) => measure(synthesiseClickSamples(RATE, seeded(seed), style)));
+  const avg = (key: keyof (typeof runs)[number]) => runs.reduce((s, r) => s + r[key], 0) / runs.length;
+  return { centroid: avg("centroid"), midBand: avg("midBand"), below500: avg("below500"), flatness: avg("flatness") };
+}
 
-  // Measured on 9 Oct 2026: the old, dull click was centred near 1.5 kHz with 8% of its energy
-  // above 4 kHz and 62% below 500 Hz. This one is centred near 5.7 kHz, 36% above 4 kHz, 4%
-  // below 500 Hz. The checks keep it in that character: bright, but short of a hiss.
+// Measured on 9 Oct 2026. The original, dull click: centred near 1.5 kHz, 62% of its energy
+// below 500 Hz. The crisp click: centred near 5.7 kHz, tonal (flatness 0.18). The slap: centred
+// near 3.5 kHz, 54% of its energy in 1–4 kHz, 4% below 500 Hz, noise-like (flatness 0.46).
+// The checks keep each in character.
+describe("the slap", () => {
+  const slap = averaged("slap");
 
-  it("is bright, centred in the range where a flap's slap lives, short of hiss", () => {
-    expect(average("centroid")).toBeGreaterThan(4500);
-    expect(average("centroid")).toBeLessThan(8000);
-    expect(average("above4k")).toBeGreaterThan(0.3);
+  it("has most of its energy in the fleshy middle where a slap lives", () => {
+    expect(slap.centroid).toBeGreaterThan(2000);
+    expect(slap.centroid).toBeLessThan(4500);
+    expect(slap.midBand).toBeGreaterThan(0.4);
+  });
+
+  it("is noise rather than tones, so it slaps instead of ringing like the click", () => {
+    expect(slap.flatness).toBeGreaterThan(averaged("click").flatness * 1.5);
   });
 
   it("has very little low thud", () => {
-    expect(average("below500")).toBeLessThan(0.08);
+    expect(slap.below500).toBeLessThan(0.08);
   });
+});
 
-  it("is short, peaks at the same level every time and never clips", () => {
+describe("the crisp click", () => {
+  it("is bright, short of hiss", () => {
+    const click = averaged("click");
+    expect(click.centroid).toBeGreaterThan(4500);
+    expect(click.centroid).toBeLessThan(8000);
+  });
+});
+
+describe("every style", () => {
+  it.each(SOUND_STYLES)("%s is short, peaks at the same level every time and never clips", (style) => {
     for (const seed of [1, 2, 3]) {
-      const samples = synthesiseClickSamples(RATE, seeded(seed));
-      expect(samples.length / RATE).toBeLessThanOrEqual(0.03);
+      const samples = synthesiseClickSamples(RATE, seeded(seed), style);
+      expect(samples.length / RATE).toBeLessThanOrEqual(0.045);
       expect(Math.max(...samples.map(Math.abs))).toBeCloseTo(0.9, 5);
     }
   });

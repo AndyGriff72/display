@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getScreen, type ScreenBoard } from "../api/screens";
+import type { SoundStyle } from "../audio/clickSynth";
 import { flapSound } from "../audio/flapSound";
 import { bindFields } from "../board/binding";
 import { Board } from "../board/Board";
@@ -118,12 +119,16 @@ function useWakeLock() {
  * sound unattended should have sound allowed for the site, or run in kiosk mode with the
  * autoplay policy relaxed.
  */
-function useSound(setting: { enabled?: boolean; volume?: number } | undefined) {
+function useSound(setting: { enabled?: boolean; volume?: number; style?: SoundStyle } | undefined) {
   const on = !!setting?.enabled;
 
   useEffect(() => {
     flapSound.setVolume(setting?.volume ?? 0.5);
   }, [setting?.volume]);
+
+  useEffect(() => {
+    flapSound.setStyle(setting?.style ?? "slap");
+  }, [setting?.style]);
 
   useEffect(() => {
     if (on) flapSound.enable();
