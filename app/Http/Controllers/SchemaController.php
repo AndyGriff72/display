@@ -25,6 +25,12 @@ class SchemaController extends Controller
         return $this->read(fn ($db) => $db->columns($table));
     }
 
+    /** The links between tables the database knows, which the join builder offers as joins. */
+    public function foreignKeys(): JsonResponse
+    {
+        return $this->read(fn ($db) => $db->foreignKeys());
+    }
+
     private function read(callable $read): JsonResponse
     {
         $database = $this->databases->current();

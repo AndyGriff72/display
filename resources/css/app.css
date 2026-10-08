@@ -548,3 +548,57 @@ label.inline {
   text-transform: none;
   font-family: inherit;
 }
+
+.kind-choice {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.form .kind-choice label {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #3a3a3e;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.form .kind-choice label.chosen {
+  border-color: #3a68df;
+  background: #22324f;
+}
+
+.kind-choice label > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.column-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+button.suggestion {
+  border-style: dashed;
+  font-size: 13px;
+}
+
+code.chip {
+  display: inline-block;
+  margin: 2px 4px 2px 0;
+  padding: 1px 6px;
+  background: #1b1c1e;
+  border: 1px solid #3a3a3e;
+  border-radius: 4px;
+}
+
+.form .code {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}

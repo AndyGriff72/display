@@ -51,6 +51,18 @@ class SqliteTargetDatabase implements TargetDatabase
         return array_map(fn ($r) => ['name' => $r->name, 'type' => strtolower($r->type)], $rows);
     }
 
+    public function foreignKeys(): array
+    {
+        $keys = [];
+        foreach ($this->tables() as $table) {
+            foreach ($this->connection()->select('SELECT "table" AS to_table, "from" AS from_column, "to" AS to_column FROM pragma_foreign_key_list(?)', [$table['name']]) as $k) {
+                $keys[] = ['fromTable' => $table['name'], 'fromColumn' => $k->from_column, 'toTable' => $k->to_table, 'toColumn' => $k->to_column];
+            }
+        }
+
+        return $keys;
+    }
+
     public function readOnly(callable $read): mixed
     {
         $connection = $this->connection();

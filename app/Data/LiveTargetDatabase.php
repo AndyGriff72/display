@@ -64,6 +64,38 @@ class LiveTargetDatabase implements TargetDatabase
         return array_map(fn ($row) => ['name' => (string) $row->name, 'type' => strtolower((string) $row->type)], $rows);
     }
 
+    public function foreignKeys(): array
+    {
+        $catalog = DB::connection(self::CATALOG);
+
+        $rows = DatabaseEngines::family($this->engine) === DatabaseEngines::POSTGRESQL
+            ? $catalog->select(
+                'SELECT kcu.table_name AS from_table, kcu.column_name AS from_column, ccu.table_name AS to_table, ccu.column_name AS to_column
+                   FROM information_schema.table_constraints tc
+                   JOIN information_schema.key_column_usage kcu
+                     ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
+                   JOIN information_schema.constraint_column_usage ccu
+                     ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+                  WHERE tc.constraint_type = \'FOREIGN KEY\' AND tc.table_schema = ?
+                  ORDER BY kcu.table_name, kcu.column_name',
+                [$this->schema],
+            )
+            : $catalog->select(
+                'SELECT table_name AS from_table, column_name AS from_column, referenced_table_name AS to_table, referenced_column_name AS to_column
+                   FROM information_schema.key_column_usage
+                  WHERE table_schema = ? AND referenced_table_name IS NOT NULL
+                  ORDER BY table_name, column_name',
+                [$this->schema],
+            );
+
+        return array_map(fn ($r) => [
+            'fromTable' => (string) $r->from_table,
+            'fromColumn' => (string) $r->from_column,
+            'toTable' => (string) $r->to_table,
+            'toColumn' => (string) $r->to_column,
+        ], $rows);
+    }
+
     public function readOnly(callable $read): mixed
     {
         $connection = $this->connection();

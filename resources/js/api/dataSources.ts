@@ -37,9 +37,33 @@ export interface Sort {
   direction: "asc" | "desc";
 }
 
+/** One table, tables joined in the join builder, or a SELECT written by hand. */
+export type DataSourceKind = "table" | "join" | "sql";
+
+/** A table joined on: rows where `from` (an earlier table's "table.column") equals this table's `to` column. */
+export interface Join {
+  table: string;
+  /** "inner" keeps only rows that match; "left" keeps rows with no match too. */
+  type: "inner" | "left";
+  from: string;
+  to: string;
+}
+
+/** A link the database knows between two tables. */
+export interface ForeignKey {
+  fromTable: string;
+  fromColumn: string;
+  toTable: string;
+  toColumn: string;
+}
+
 export interface DataSourceDefinition {
   name: string;
+  kind: DataSourceKind;
+  /** The starting table (unused for written SQL). */
   table: string;
+  joins: Join[];
+  sql: string | null;
   columns: string[];
   filters: Filter[];
   sort: Sort[];
@@ -63,6 +87,11 @@ export async function listTables(): Promise<TableInfo[]> {
 
 export async function listColumns(table: string): Promise<ColumnInfo[]> {
   const { data } = await api.get<ApiResponse<ColumnInfo[]>>(`/schema/tables/${encodeURIComponent(table)}/columns`);
+  return data.data;
+}
+
+export async function listForeignKeys(): Promise<ForeignKey[]> {
+  const { data } = await api.get<ApiResponse<ForeignKey[]>>("/schema/foreign-keys");
   return data.data;
 }
 

@@ -30,6 +30,14 @@ interface TargetDatabase
     public function columns(string $table): array;
 
     /**
+     * The links the database knows between its tables: each foreign key column and the column it
+     * refers to. Single-column keys only; the join builder offers these as ready-made joins.
+     *
+     * @return list<array{fromTable: string, fromColumn: string, toTable: string, toColumn: string}>
+     */
+    public function foreignKeys(): array;
+
+    /**
      * Run $read inside a read-only transaction with a statement time limit, and return what it
      * returns. The builder only ever writes SELECTs; this makes sure nothing else could run.
      *

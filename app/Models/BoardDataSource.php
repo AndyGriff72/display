@@ -6,11 +6,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
- * A saved query for a board: one table, some of its columns, filtered, sorted and limited.
+ * A saved query for a board: one table, tables joined in the join builder, or a SELECT written by
+ * the admin; see DataSourceQuery for how each kind runs.
  *
  * @property string $uuid
  * @property string $name
+ * @property string $kind "table", "join" or "sql"
  * @property string $table_name
+ * @property list<array{table: string, type: string, from: string, to: string}>|null $joins
+ * @property string|null $sql
  * @property list<string> $columns
  * @property list<array{column: string, operator: string, valueKind: string, value: ?string}> $filters
  * @property list<array{column: string, direction: string}> $sort
@@ -21,7 +25,10 @@ class BoardDataSource extends Model
 {
     protected $fillable = [
         'name',
+        'kind',
         'table_name',
+        'joins',
+        'sql',
         'columns',
         'filters',
         'sort',
@@ -31,6 +38,7 @@ class BoardDataSource extends Model
 
     protected $casts = [
         'columns' => 'array',
+        'joins' => 'array',
         'filters' => 'array',
         'sort' => 'array',
         'row_limit' => 'integer',
@@ -47,12 +55,15 @@ class BoardDataSource extends Model
     /**
      * The query as plain data, the form DataSourceQuery runs.
      *
-     * @return array{table: string, columns: list<string>, filters: list<array>, sort: list<array>, limit: int}
+     * @return array{kind: string, table: string, joins: list<array>, sql: ?string, columns: list<string>, filters: list<array>, sort: list<array>, limit: int}
      */
     public function definition(): array
     {
         return [
+            'kind' => $this->kind ?? 'table',
             'table' => $this->table_name,
+            'joins' => $this->joins ?? [],
+            'sql' => $this->sql,
             'columns' => $this->columns ?? [],
             'filters' => $this->filters ?? [],
             'sort' => $this->sort ?? [],

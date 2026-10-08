@@ -29,6 +29,7 @@ Route::prefix('api')->group(function () {
 
         Route::get('/schema/tables', [SchemaController::class, 'tables']);
         Route::get('/schema/tables/{table}/columns', [SchemaController::class, 'columns']);
+        Route::get('/schema/foreign-keys', [SchemaController::class, 'foreignKeys']);
 
         Route::get('/data-sources', [DataSourceController::class, 'index']);
         Route::post('/data-sources/preview', [DataSourceController::class, 'preview']);
