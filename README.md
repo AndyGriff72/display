@@ -13,6 +13,8 @@ composer install
 npm install
 cp .env.example .env
 php artisan key:generate
+# Key that encrypts saved database passwords (kept separate from APP_KEY):
+php -r "echo 'CREDENTIAL_KEY=base64:'.base64_encode(random_bytes(32)).PHP_EOL;" >> .env
 php artisan migrate        # creates database/database.sqlite if it is missing
 ```
 
