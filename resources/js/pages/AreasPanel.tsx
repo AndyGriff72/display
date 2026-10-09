@@ -17,12 +17,15 @@ export function AreasPanel({
   fields,
   lists,
   boardType,
+  boardColour,
   cellHeight,
   onChange,
 }: {
   fields: FieldArea[];
   lists: ListArea[];
   boardType: CellType;
+  /** The board's character colour, which areas using the board's cells start from. */
+  boardColour: string;
   cellHeight: number;
   onChange: (next: { fields: FieldArea[]; lists: ListArea[] }) => void;
 }) {
@@ -48,7 +51,7 @@ export function AreasPanel({
           <span className="area-name">
             {f.id} <span className="hint">field · {f.area}</span>
           </span>
-          <CellStyle cell={f.cell} boardType={boardType} cellHeight={cellHeight} onChange={(cell) => setField(i, cell)} />
+          <CellStyle cell={f.cell} boardType={boardType} boardColour={boardColour} cellHeight={cellHeight} onChange={(cell) => setField(i, cell)} />
         </div>
       ))}
       {lists.map((list, l) =>
@@ -57,7 +60,7 @@ export function AreasPanel({
             <span className="area-name">
               {list.id} › {col.title || col.text || `column ${c + 1}`} <span className="hint">list column {c + 1}</span>
             </span>
-            <CellStyle cell={col.cell} boardType={boardType} cellHeight={cellHeight} onChange={(cell) => setColumn(l, c, cell)} />
+            <CellStyle cell={col.cell} boardType={boardType} boardColour={boardColour} cellHeight={cellHeight} onChange={(cell) => setColumn(l, c, cell)} />
           </div>
         ))
       )}
@@ -69,26 +72,40 @@ export function AreasPanel({
 function CellStyle({
   cell,
   boardType,
+  boardColour,
   cellHeight,
   onChange,
 }: {
   cell?: AreaCell;
   boardType: CellType;
+  boardColour: string;
   cellHeight: number;
   onChange: (cell: AreaCell | undefined) => void;
 }) {
   const type = cell?.type;
-  const set = (patch: Partial<AreaCell>) => onChange(tidy({ ...cell, ...patch }));
-  const colour = cell?.color ?? DEFAULT_COLOURS[type ?? boardType];
+  // The type the area is drawn as: its own, or the board's.
+  const drawnAs: AreaCellType = type ?? boardType;
+  const hasBackground = (t: AreaCellType) => t === "splitflap" || t === "text";
+  const set = (patch: Partial<AreaCell>) => {
+    const next = tidy({ ...cell, ...patch });
+    onChange(Object.keys(next).length ? next : undefined);
+  };
+
+  // A new type keeps the colours chosen, where it can use them, but none of the last type's
+  // other settings.
+  const changeType = (value: string) => {
+    const next = (value || undefined) as AreaCellType | undefined;
+    const kept = tidy({
+      type: next,
+      color: cell?.color,
+      background: hasBackground(next ?? boardType) ? cell?.background : undefined,
+    });
+    onChange(Object.keys(kept).length ? kept : undefined);
+  };
 
   return (
     <span className="row-editor">
-      <select
-        value={type ?? ""}
-        // A new type starts from its own defaults rather than the last type's settings.
-        onChange={(e) => onChange(e.target.value ? { type: e.target.value as AreaCellType } : undefined)}
-        aria-label="Cell type"
-      >
+      <select value={type ?? ""} onChange={(e) => changeType(e.target.value)} aria-label="Cell type">
         <option value="">Board's cells ({TYPE_LABELS[boardType]})</option>
         {(Object.keys(TYPE_LABELS) as AreaCellType[]).map((t) => (
           <option key={t} value={t}>
@@ -96,11 +113,22 @@ function CellStyle({
           </option>
         ))}
       </select>
-      {type && (
+      {type ? (
         <label className="inline">
           {type === "text" ? "Text" : "Colour"}
-          <input type="color" value={toHex(colour)} onChange={(e) => set({ color: e.target.value })} />
+          <input type="color" value={toHex(cell?.color ?? DEFAULT_COLOURS[type])} onChange={(e) => set({ color: e.target.value })} />
         </label>
+      ) : (
+        // The board's cells: its colour, unless the area is given one of its own.
+        <OptionalColour label="Own colour" value={cell?.color} fallback={toHex(boardColour)} onChange={(color) => set({ color })} />
+      )}
+      {hasBackground(drawnAs) && (
+        <OptionalColour
+          label={drawnAs === "splitflap" ? "Flap colour" : "Background"}
+          value={cell?.background}
+          fallback={drawnAs === "splitflap" ? "#1d1d1f" : "#1b1b1d"}
+          onChange={(background) => set({ background })}
+        />
       )}
       {(type === "splitflap" || type === "text") && (
         <select value={cell?.fontFamily ?? ""} onChange={(e) => set({ fontFamily: e.target.value || undefined })} aria-label="Typeface">
@@ -119,20 +147,17 @@ function CellStyle({
         </select>
       )}
       {type === "text" && (
-        <>
-          <label className="inline">
-            Size
-            <input
-              type="number"
-              min={4}
-              max={400}
-              value={cell?.fontSize ?? Math.round(cellHeight * 0.6)}
-              onChange={(e) => set({ fontSize: Number(e.target.value) || undefined })}
-              style={{ width: 60 }}
-            />
-          </label>
-          <OptionalColour label="Background" value={cell?.background} fallback="#1b1b1d" onChange={(background) => set({ background })} />
-        </>
+        <label className="inline">
+          Size
+          <input
+            type="number"
+            min={4}
+            max={400}
+            value={cell?.fontSize ?? Math.round(cellHeight * 0.6)}
+            onChange={(e) => set({ fontSize: Number(e.target.value) || undefined })}
+            style={{ width: 60 }}
+          />
+        </label>
       )}
     </span>
   );

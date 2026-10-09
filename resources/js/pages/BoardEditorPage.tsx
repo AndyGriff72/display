@@ -459,6 +459,7 @@ export default function BoardEditorPage() {
           fields={shape.fields ?? []}
           lists={shape.lists ?? []}
           boardType={cellType}
+          boardColour={colour}
           cellHeight={cellHeight}
           onChange={({ fields, lists }) => replaceShape({ ...shape, ...(shape.fields ? { fields } : {}), ...(shape.lists ? { lists } : {}) })}
         />

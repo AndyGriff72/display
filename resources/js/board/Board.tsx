@@ -79,6 +79,7 @@ export function Board({ layout, values, records = [], page = 0, onFlap, showArea
                 fontFamily={spec.fontFamily}
                 stack={spec.stack}
                 flipMs={spec.flipMs}
+                background={spec.background}
                 onFlap={onFlap}
               />
             );

@@ -330,7 +330,40 @@ describe("areas with their own cell type", () => {
     };
     const [header, first] = textBlocks(withHeader, {}, [{ c: "CREWE" }]);
     expect(header).toMatchObject({ text: "CALLING AT", style: { color: DEFAULT_HEADER_COLOR, fontSize: 30 } });
+
+    // A column's background starts below its header, so it can never hide the title.
+    const yellow = { ...withHeader, lists: [{ ...withHeader.lists![0], columns: [{ ...withHeader.lists![0].columns[0], cell: { type: "text" as const, background: "#ffcc33" } }] }] };
+    const [onBoard, coloured] = textBlocks(yellow, {}, [{ c: "CREWE" }]);
+    expect(onBoard.style.background).toBeUndefined();
+    expect(coloured.style.background).toBe("#ffcc33");
     expect(first).toMatchObject({ text: "CREWE", rect: { x1: 0, x2: 9, y1: 1, y2: 1 } });
+  });
+
+  it("lets an area keep the board's cells but take its own colour and flap colour", () => {
+    const specs = cellSpecs({
+      columns: 10,
+      rows: 1,
+      cell: board,
+      fields: [{ id: "f", area: "0,0 to 4,0", cell: { color: "#ff0000", background: "#003366" } }],
+    });
+    expect(specs.get("0,0")).toMatchObject({ type: "splitflap", color: "#ff0000", background: "#003366" });
+  });
+
+  it("uses a background for split-flaps and text, and ignores one for dot matrix and segments", () => {
+    const layout: BoardLayout = {
+      columns: 20,
+      rows: 1,
+      cell: board,
+      fields: [
+        { id: "dots", area: "0,0 to 4,0", cell: { type: "dotmatrix", background: "#003366" } },
+        { id: "segs", area: "5,0 to 9,0", cell: { type: "segment", background: "#003366" } },
+        { id: "text", area: "10,0 to 19,0", cell: { type: "text", background: "#003366", color: "#00ff00" } },
+      ],
+    };
+    const specs = cellSpecs(layout);
+    expect(specs.get("0,0")?.background).toBeUndefined();
+    expect(specs.get("5,0")?.background).toBeUndefined();
+    expect(textBlocks(layout, { text: "HELLO" })[0].style).toMatchObject({ background: "#003366", color: "#00ff00" });
   });
 
   it("reports an area cell type or setting it does not know", () => {

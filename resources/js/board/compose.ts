@@ -32,6 +32,8 @@ export interface CellSpec {
   stack?: string;
   flipMs?: number;
   segments?: 7 | 14;
+  /** Split-flap: the flaps' colour, when not the usual near-black. */
+  background?: string;
 }
 
 /** How an area drawn as text looks. */
@@ -67,6 +69,7 @@ export function resolveCell(board: CellSettings, own?: AreaCell): CellSpec | nul
     stack: own?.stack ?? board.stack,
     flipMs: own?.flipMs ?? board.flipMs,
     segments: own?.segments ?? board.segments,
+    background: type === "splitflap" ? own?.background : undefined,
   };
 }
 
@@ -255,16 +258,18 @@ export function textBlocks(layout: BoardLayout, values: Record<string, string>, 
     list.columns.forEach((column, j) => {
       if ((column?.cell?.type ?? layout.cell.type) !== "text") return;
       const style = resolveText(layout.cell, column.cell);
-      const block = (y: number, text: string, colour?: string) =>
+      const block = (y: number, text: string, header?: string) =>
         blocks.push({
           key: `list:${list.id}:${j}:${y}`,
           rect: { x1: spans[j].x1, x2: spans[j].x2, y1: y, y2: y },
           text,
           align: column.align ?? "left",
           wrap: false,
-          style: colour ? { ...style, color: colour } : style,
+          style: header ? { ...style, color: header, background: undefined } : style,
         });
       let y = rect.y1;
+      // The header is a label above the column: in the header colour, on the board itself,
+      // so the column's background starts with its first record and can never hide its title.
       if (list.header) block(y++, column.title ?? "", list.headerColor ?? DEFAULT_HEADER_COLOR);
       for (const record of rows) block(y++, record ? renderTemplate(String(column.text ?? ""), record) : "");
     });

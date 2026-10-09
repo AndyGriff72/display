@@ -47,7 +47,10 @@ export interface AreaCell {
   segments?: 7 | 14;
   /** Text: size in pixels. Defaults to about 60% of a cell's height. */
   fontSize?: number;
-  /** Text: a background colour behind the text. Without one, the board shows through. */
+  /**
+   * Split-flap: the colour of the flaps. Text: a colour behind the text, which otherwise lets
+   * the board show through. (Dot matrix and segments are always drawn on black.)
+   */
   background?: string;
 }
 
