@@ -1,27 +1,52 @@
 /**
- * The click a flap makes when it lands. One shared player for the whole board: a board of
+ * The sound a flap makes when it lands. One shared player for the whole board: a board of
  * a few hundred cells can land thousands of flaps a second, and playing every one of them
  * would be both deafening and expensive, so landings closer together than MIN_GAP_MS are
  * dropped. What is left still reads as the clatter of a whole board settling.
  *
- * The default click is synthesised, so there is no third-party recording to license. A
- * recorded sample can be swapped in with useSample().
+ * The default is a recording of a real mechanism (resources/wav/split-flap.wav). The
+ * synthesised styles in clickSynth.ts remain as alternatives.
  */
 
-import { synthesiseClickSamples, type SoundStyle } from "./clickSynth";
+import recordingUrl from "../../wav/split-flap.wav?url";
+import { SYNTH_STYLE_LABELS, SYNTH_STYLES, synthesiseClickSamples, type SynthStyle } from "./clickSynth";
+
+/** Every sound a board can choose: the recording first, then the synthesised ones. */
+export const SOUND_STYLES = ["recorded", ...SYNTH_STYLES] as const;
+export type SoundStyle = (typeof SOUND_STYLES)[number];
+
+export const SOUND_STYLE_LABELS: Record<SoundStyle, string> = {
+  recorded: "Real mechanism",
+  ...SYNTH_STYLE_LABELS,
+};
+
+export const DEFAULT_SOUND_STYLE: SoundStyle = "recorded";
 
 const MIN_GAP_MS = 50;
 const VARIANTS = 8;
+
+/** Playback speed for synthesised flaps (tuned by ear), with a little variation each time. */
+const SYNTH_RATE = { from: 1.52, spread: 0.16 };
+
+/**
+ * Playback speed for the recording: its own, give or take a little, so no two flaps sound
+ * quite alike without the pitch moving away from the real thing.
+ */
+const RECORDED_RATE = { from: 0.94, spread: 0.12 };
+
+/** The level every sound is brought to, so the volume setting means the same for each style. */
+const PEAK = 0.9;
 
 class FlapSound {
   private ctx: AudioContext | null = null;
   private output: GainNode | null = null;
   private synthesised: AudioBuffer[] = [];
-  private sample: AudioBuffer | null = null;
+  private recording: AudioBuffer | null = null;
+  private recordingLoad: Promise<void> | null = null;
   private lastPlayed = 0;
   private enabled = false;
   private volume = 0.5;
-  private style: SoundStyle = "slap";
+  private style: SoundStyle = DEFAULT_SOUND_STYLE;
 
   /**
    * Turn the sound on, starting it now if the browser allows.
@@ -38,11 +63,11 @@ class FlapSound {
     if (ctx.state !== "running") this.resumeOnFirstInteraction();
   }
 
-  /** Which synthesised sound flaps make (see clickSynth.ts). */
+  /** Which sound flaps make: the recording, or a synthesised style (see clickSynth.ts). */
   setStyle(style: SoundStyle): void {
     if (style === this.style) return;
     this.style = style;
-    if (this.ctx) this.synthesised = this.makeVariants(this.ctx);
+    if (this.ctx) this.prepare(this.ctx);
   }
 
   /**
@@ -52,12 +77,16 @@ class FlapSound {
   audition(): void {
     const ctx = this.context();
     ctx.resume().catch(() => {});
-    const start = ctx.currentTime + 0.05;
-    for (let i = 0; i < 14; i++) {
-      // Quick at first, slowing as the board settles, as a real run of flaps does.
-      const at = start + i * 0.035 + (i * i) * 0.0015 + Math.random() * 0.008;
-      this.voice(ctx, at);
-    }
+    // The recording may still be on its way the very first time: wait for it, then play.
+    const ready = this.style === "recorded" ? this.loadRecording(ctx) : Promise.resolve();
+    ready.then(() => {
+      const start = ctx.currentTime + 0.05;
+      for (let i = 0; i < 14; i++) {
+        // Quick at first, slowing as the board settles, as a real run of flaps does.
+        const at = start + i * 0.035 + i * i * 0.0015 + Math.random() * 0.008;
+        this.voice(ctx, at);
+      }
+    });
   }
 
   private context(): AudioContext {
@@ -66,21 +95,51 @@ class FlapSound {
       this.output = this.ctx.createGain();
       this.output.gain.value = this.volume;
       this.output.connect(this.ctx.destination);
-      this.synthesised = this.makeVariants(this.ctx);
+      this.prepare(this.ctx);
     }
     return this.ctx;
   }
 
-  private makeVariants(ctx: AudioContext): AudioBuffer[] {
-    return Array.from({ length: VARIANTS }, () => synthesiseClick(ctx, this.style));
+  /** Have the current style's sound ready to play. */
+  private prepare(ctx: AudioContext): void {
+    if (this.style === "recorded") {
+      this.loadRecording(ctx);
+    } else {
+      const style = this.style as SynthStyle;
+      this.synthesised = Array.from({ length: VARIANTS }, () => synthesiseClick(ctx, style));
+    }
+  }
+
+  /** Fetch and decode the recording, once, levelled to the same peak as the synthesised sounds. */
+  private loadRecording(ctx: AudioContext): Promise<void> {
+    this.recordingLoad ??= fetch(recordingUrl)
+      .then((response) => response.arrayBuffer())
+      .then((data) => ctx.decodeAudioData(data))
+      .then((buffer) => {
+        this.recording = levelled(buffer);
+      })
+      .catch(() => {
+        // Without the recording, fall back to a synthesised slap rather than silence.
+        this.recordingLoad = null;
+        this.synthesised = Array.from({ length: VARIANTS }, () => synthesiseClick(ctx, "slap"));
+      });
+    return this.recordingLoad;
   }
 
   private voice(ctx: AudioContext, at?: number): void {
+    const recorded = this.style === "recorded" && this.recording !== null;
+    const buffer = recorded ? this.recording : this.synthesised[Math.floor(Math.random() * this.synthesised.length)];
+    if (!buffer) return;
+
     const source = ctx.createBufferSource();
-    source.buffer = this.sample ?? this.synthesised[Math.floor(Math.random() * this.synthesised.length)];
+    source.buffer = buffer;
     // No two flaps sound quite the same.
-    source.playbackRate.value = 1.52 + Math.random() * 0.16;
-    source.connect(this.output!);
+    const rate = recorded ? RECORDED_RATE : SYNTH_RATE;
+    source.playbackRate.value = rate.from + Math.random() * rate.spread;
+    // Nor land quite as hard: a recording played identically every time sounds like one.
+    const level = ctx.createGain();
+    level.gain.value = recorded ? 0.8 + Math.random() * 0.2 : 1;
+    source.connect(level).connect(this.output!);
     source.start(at);
   }
 
@@ -108,17 +167,6 @@ class FlapSound {
     if (this.output) this.output.gain.value = volume;
   }
 
-  /** Play a recorded click instead of the synthesised one. Pass null to go back. */
-  async useSample(url: string | null): Promise<void> {
-    if (!url) {
-      this.sample = null;
-      return;
-    }
-    if (!this.ctx) throw new Error("Enable sound before loading a sample.");
-    const response = await fetch(url);
-    this.sample = await this.ctx.decodeAudioData(await response.arrayBuffer());
-  }
-
   play(): void {
     const ctx = this.ctx;
     if (!this.enabled || !ctx || !this.output || ctx.state !== "running") return;
@@ -132,11 +180,27 @@ class FlapSound {
   }
 }
 
-/** One variant of the flap's click (see clickSynth.ts), ready to play. */
-function synthesiseClick(ctx: AudioContext, style: SoundStyle): AudioBuffer {
+/** One variant of a synthesised click (see clickSynth.ts), ready to play. */
+function synthesiseClick(ctx: AudioContext, style: SynthStyle): AudioBuffer {
   const samples = synthesiseClickSamples(ctx.sampleRate, Math.random, style);
   const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
   buffer.getChannelData(0).set(samples);
+  return buffer;
+}
+
+/** A buffer scaled, every channel alike, so its loudest moment reaches PEAK. */
+function levelled(buffer: AudioBuffer): AudioBuffer {
+  let peak = 0;
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    for (const v of buffer.getChannelData(c)) peak = Math.max(peak, Math.abs(v));
+  }
+  if (peak > 0) {
+    const scale = PEAK / peak;
+    for (let c = 0; c < buffer.numberOfChannels; c++) {
+      const data = buffer.getChannelData(c);
+      for (let i = 0; i < data.length; i++) data[i] *= scale;
+    }
+  }
   return buffer;
 }
 

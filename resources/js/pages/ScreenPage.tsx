@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getScreen, type ScreenBoard } from "../api/screens";
-import type { SoundStyle } from "../audio/clickSynth";
-import { flapSound } from "../audio/flapSound";
+import { DEFAULT_SOUND_STYLE, flapSound, type SoundStyle } from "../audio/flapSound";
 import { bindFields } from "../board/binding";
 import { Board } from "../board/Board";
 import { usePaging } from "../board/usePaging";
@@ -127,7 +126,7 @@ function useSound(setting: { enabled?: boolean; volume?: number; style?: SoundSt
   }, [setting?.volume]);
 
   useEffect(() => {
-    flapSound.setStyle(setting?.style ?? "slap");
+    flapSound.setStyle(setting?.style ?? DEFAULT_SOUND_STYLE);
   }, [setting?.style]);
 
   useEffect(() => {

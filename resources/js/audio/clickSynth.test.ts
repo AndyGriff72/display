@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SOUND_STYLES, synthesiseClickSamples, type SoundStyle } from "./clickSynth";
+import { SYNTH_STYLES, synthesiseClickSamples, type SynthStyle } from "./clickSynth";
 
 const RATE = 44100;
 
@@ -45,7 +45,7 @@ function measure(samples: Float32Array) {
   };
 }
 
-function averaged(style: SoundStyle) {
+function averaged(style: SynthStyle) {
   const runs = [1, 2, 3, 4].map((seed) => measure(synthesiseClickSamples(RATE, seeded(seed), style)));
   const avg = (key: keyof (typeof runs)[number]) => runs.reduce((s, r) => s + r[key], 0) / runs.length;
   return { centroid: avg("centroid"), midBand: avg("midBand"), below500: avg("below500"), flatness: avg("flatness") };
@@ -82,7 +82,7 @@ describe("the crisp click", () => {
 });
 
 describe("every style", () => {
-  it.each(SOUND_STYLES)("%s is short, peaks at the same level every time and never clips", (style) => {
+  it.each(SYNTH_STYLES)("%s is short, peaks at the same level every time and never clips", (style) => {
     for (const seed of [1, 2, 3]) {
       const samples = synthesiseClickSamples(RATE, seeded(seed), style);
       expect(samples.length / RATE).toBeLessThanOrEqual(0.045);

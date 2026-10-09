@@ -1,13 +1,14 @@
 /**
- * The sound of one flap landing, made from scratch so there is no recording to license, in a
- * choice of styles. Kept free of the Web Audio API, which only fills a buffer with what this
- * returns, so each style can be measured in tests.
+ * The sound of one flap landing, made from scratch, in a choice of styles: alternatives to the
+ * recording of a real mechanism that boards use by default (see flapSound.ts). Kept free of the
+ * Web Audio API, which only fills a buffer with what this returns, so each style can be measured
+ * in tests.
  */
 
-export const SOUND_STYLES = ["slap", "click"] as const;
-export type SoundStyle = (typeof SOUND_STYLES)[number];
+export const SYNTH_STYLES = ["slap", "click"] as const;
+export type SynthStyle = (typeof SYNTH_STYLES)[number];
 
-export const SOUND_STYLE_LABELS: Record<SoundStyle, string> = {
+export const SYNTH_STYLE_LABELS: Record<SynthStyle, string> = {
   slap: "Slap",
   click: "Crisp click",
 };
@@ -15,7 +16,7 @@ export const SOUND_STYLE_LABELS: Record<SoundStyle, string> = {
 export function synthesiseClickSamples(
   rate: number,
   random: () => number = Math.random,
-  style: SoundStyle = "slap"
+  style: SynthStyle = "slap"
 ): Float32Array {
   return normalise(style === "click" ? click(rate, random) : slap(rate, random));
 }

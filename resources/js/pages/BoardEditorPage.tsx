@@ -3,8 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { deleteBoard, getBoard, listBoards, saveBoard, type BoardSummary } from "../api/boards";
 import { apiError } from "../api/client";
 import { listDataSources, type SavedDataSource } from "../api/dataSources";
-import { SOUND_STYLE_LABELS, SOUND_STYLES, type SoundStyle } from "../audio/clickSynth";
-import { flapSound } from "../audio/flapSound";
+import { DEFAULT_SOUND_STYLE, flapSound, SOUND_STYLE_LABELS, SOUND_STYLES, type SoundStyle } from "../audio/flapSound";
 import { bindFields, templateColumns, type Row } from "../board/binding";
 import { Board } from "../board/Board";
 import {
@@ -88,7 +87,7 @@ export default function BoardEditorPage() {
   const [stackName, setStackName] = useState<CharsetName>("standard");
   // Saved with the board: whether it makes the flap sound, here and on screens.
   const [soundOn, setSoundOn] = useState(false);
-  const [soundStyle, setSoundStyle] = useState<SoundStyle>("slap");
+  const [soundStyle, setSoundStyle] = useState<SoundStyle>(DEFAULT_SOUND_STYLE);
   const [volume, setVolume] = useState(0.5);
 
   // The data sources to choose from. None (or no connection yet) just leaves the list empty.
@@ -201,7 +200,7 @@ export default function BoardEditorPage() {
         "standard"
     );
     setSoundOn(!!sound?.enabled);
-    setSoundStyle(sound?.style && SOUND_STYLES.includes(sound.style) ? sound.style : "slap");
+    setSoundStyle(sound?.style && SOUND_STYLES.includes(sound.style) ? sound.style : DEFAULT_SOUND_STYLE);
     setVolume(sound?.volume ?? 0.5);
   };
 

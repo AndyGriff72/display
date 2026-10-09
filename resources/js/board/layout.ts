@@ -7,7 +7,7 @@
  * written on its own, e.g. "5,2".
  */
 
-import type { SoundStyle } from "../audio/clickSynth";
+import type { SoundStyle } from "../audio/flapSound";
 
 export const CELL_TYPES = ["splitflap", "dotmatrix", "segment"] as const;
 export type CellType = (typeof CELL_TYPES)[number];
