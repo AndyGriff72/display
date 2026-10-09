@@ -1,5 +1,5 @@
 import type { Row } from "../board/binding";
-import type { BoardLayout, CellType } from "../board/layout";
+import type { BoardLayout, CellType, Finish } from "../board/layout";
 
 /** A layout's structure: everything but the cell appearance, which the editor's controls set. */
 export type LayoutShape = Omit<BoardLayout, "cell">;
@@ -12,6 +12,8 @@ export interface Sample {
   cellHeight: number;
   /** The board's cell type for this sample; split-flap when not given. */
   cellType?: CellType;
+  /** The board's finish, for dot-matrix and segment boards. */
+  finish?: Finish;
   /** Gaps between cells, when the sample needs particular ones. */
   gapX?: number;
   gapY?: number;
@@ -84,6 +86,31 @@ export const SAMPLES: Sample[] = [
         { id: "route", area: "0,0 to 2,1", text: "73" },
         { id: "destination", area: "4,0 to 27,0", text: "{destination}" },
         { id: "via", area: "4,1 to 27,1", text: "VIA {calling_at}" },
+      ],
+    },
+  },
+  {
+    id: "vfd",
+    label: "VFD and lightbulbs",
+    cellWidth: 26,
+    cellHeight: 36,
+    cellType: "dotmatrix",
+    finish: "vfd",
+    layout: {
+      columns: 32,
+      rows: 5,
+      pageSeconds: 8,
+      fields: [{ id: "title", area: "0,0 to 31,0", align: "center", text: "DEPARTURES", cell: { type: "dotmatrix", finish: "bulb" } }],
+      lists: [
+        {
+          id: "departures",
+          area: "0,1 to 31,4",
+          columns: [
+            { text: "{departs_at|HH:mm}", width: 5 },
+            { text: "{destination}", width: 16 },
+            { text: "{status}", align: "right" },
+          ],
+        },
       ],
     },
   },

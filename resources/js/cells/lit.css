@@ -14,7 +14,10 @@
   overflow: visible;
 }
 
-.lit-cell circle {
+/* The lights themselves, not the VFD mesh laid over them, which has a pattern of its own. */
+.lit-cell circle,
+.lit-cell .lit-off rect,
+.lit-cell .lit-on rect {
   fill: currentColor;
 }
 
@@ -24,4 +27,51 @@
 
 .lit-off {
   opacity: var(--lit-unlit-opacity);
+}
+
+/* A dot's light, over its unlit self: on or off. LEDs and VFDs switch at once. */
+.lit-dot {
+  opacity: 0;
+}
+
+.lit-dot.is-lit {
+  opacity: 1;
+}
+
+/* --- VFD: blue-green phosphor on a tinted black, unlit elements faintly tinted, behind a mesh. --- */
+.lit-cell.finish-vfd {
+  --lit-unlit-opacity: 0.13;
+  background: #030b0a;
+}
+
+.lit-cell .vfd-mesh {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* --- Lightbulbs: dim glass when off; a warm glow with a hot centre when lit. --- */
+.lit-cell.finish-bulb {
+  --lit-unlit-opacity: 1;
+  background: #0b0907;
+}
+
+/* Unlit bulbs are glass catching a little light, not a faint version of the lit colour. */
+.lit-cell.finish-bulb .lit-off circle {
+  fill: #2a2622;
+  stroke: #3a352e;
+  stroke-width: 0.04;
+}
+
+/* Filaments take a moment to warm up and a little longer to cool down. */
+.lit-cell.finish-bulb .lit-dot {
+  transition: opacity 350ms ease-out;
+}
+
+.lit-cell.finish-bulb .lit-dot.is-lit {
+  transition: opacity 120ms ease-in;
+}
+
+.lit-cell.finish-bulb .filament {
+  fill: #fff6dc;
+  opacity: 0.85;
 }

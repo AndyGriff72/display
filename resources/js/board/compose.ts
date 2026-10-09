@@ -14,6 +14,8 @@ import {
   contains,
   DEFAULT_COLOURS,
   DEFAULT_HEADER_COLOR,
+  FINISH_COLOURS,
+  type Finish,
   parseArea,
   type AreaCell,
   type BoardLayout,
@@ -35,6 +37,8 @@ export interface CellSpec {
   segments?: 7 | 14;
   /** Split-flap: the flaps' colour. Flip-dot: the discs' dark side. */
   background?: string;
+  /** Dot matrix and segment: how they are drawn. */
+  finish?: Finish;
 }
 
 /** How an area drawn as text looks. */
@@ -63,9 +67,18 @@ export function resolveCell(board: CellSettings, own?: AreaCell): CellSpec | nul
   const type = own?.type ?? board.type;
   if (type === "text") return null;
   const sameType = type === board.type;
+  // A finish of the area's own, or the board's when the area uses the board's kind of cell.
+  const finish = type === "dotmatrix" || type === "segment" ? (own?.finish ?? (sameType ? board.finish : undefined)) : undefined;
   return {
     type,
-    color: own?.color ?? (sameType ? board.color : undefined) ?? DEFAULT_COLOURS[type],
+    // Its own colour; else, if it chose a finish, that finish's colour; else the board's.
+    color:
+      own?.color ??
+      (own?.finish ? FINISH_COLOURS[own.finish] : undefined) ??
+      (sameType ? board.color : undefined) ??
+      (finish ? FINISH_COLOURS[finish] : undefined) ??
+      DEFAULT_COLOURS[type],
+    finish: finish === "bulb" && type !== "dotmatrix" ? "led" : finish,
     fontFamily: own?.fontFamily ?? board.fontFamily,
     stack: own?.stack ?? board.stack,
     flipMs: own?.flipMs ?? board.flipMs,

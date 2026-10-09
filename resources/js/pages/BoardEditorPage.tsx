@@ -10,9 +10,12 @@ import {
   CELL_TYPES,
   DEFAULT_PAGE_SECONDS,
   parseArea,
+  FINISH_COLOURS,
+  FINISHES,
   validateLayout,
   type BoardLayout,
   type CellType,
+  type Finish,
 } from "../board/layout";
 import { useBoardData } from "../board/useBoardData";
 import { usePaging } from "../board/usePaging";
@@ -28,6 +31,12 @@ const CELL_TYPE_LABELS: Record<CellType, string> = {
   dotmatrix: "Dot matrix",
   segment: "LED segments",
   flipdot: "Flip-dot",
+};
+
+const FINISH_LABELS: Record<Finish, string> = {
+  led: "LED",
+  vfd: "VFD (vacuum fluorescent)",
+  bulb: "Lightbulbs",
 };
 
 /** Each cell type starts in the colour it is best known in. */
@@ -83,6 +92,7 @@ export default function BoardEditorPage() {
   const [cellType, setCellType] = useState<CellType>("splitflap");
   const [colour, setColour] = useState(DEFAULT_COLOURS.splitflap);
   const [segments, setSegments] = useState<7 | 14>(14);
+  const [finish, setFinish] = useState<Finish>("led");
   const [cellWidth, setCellWidth] = useState(SAMPLES[0].cellWidth);
   const [cellHeight, setCellHeight] = useState(SAMPLES[0].cellHeight);
   // The gaps between cells, across and down; unset means the usual proportion of the cell.
@@ -159,6 +169,7 @@ export default function BoardEditorPage() {
     setCellHeight(sample.cellHeight);
     const type = sample.cellType ?? "splitflap";
     if (type !== cellType) changeCellType(type);
+    if (sample.finish) changeFinish(sample.finish);
     setGapX(sample.gapX);
     setGapY(sample.gapY);
   };
@@ -181,9 +192,10 @@ export default function BoardEditorPage() {
         stack: CHARSETS[stackName],
         flipMs,
         segments,
+        ...(finish !== "led" ? { finish } : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, segments]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, segments, finish]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -203,6 +215,7 @@ export default function BoardEditorPage() {
     setCellType(cell.type);
     setColour(cell.color ?? DEFAULT_COLOURS[cell.type]);
     setSegments(cell.segments ?? 14);
+    setFinish(cell.finish ?? "led");
     setCellWidth(cell.width);
     setCellHeight(cell.height);
     setGapX(cell.gapX);
@@ -322,7 +335,16 @@ export default function BoardEditorPage() {
 
   const changeCellType = (type: CellType) => {
     setCellType(type);
-    setColour(DEFAULT_COLOURS[type]);
+    // Lightbulbs are dot matrix only; other types have no finish at all.
+    const kept = type === "dotmatrix" || (type === "segment" && finish !== "bulb") ? finish : "led";
+    setFinish(kept);
+    setColour(FINISH_COLOURS[kept] ?? DEFAULT_COLOURS[type]);
+  };
+
+  // A finish brings its own colour, as a new cell type does.
+  const changeFinish = (next: Finish) => {
+    setFinish(next);
+    setColour(FINISH_COLOURS[next] ?? DEFAULT_COLOURS[cellType]);
   };
 
   // Whether the browser is holding the sound back until this page is clicked or typed on.
@@ -531,6 +553,18 @@ export default function BoardEditorPage() {
             ))}
           </span>
         </label>
+        {(cellType === "dotmatrix" || cellType === "segment") && (
+          <label>
+            Finish
+            <select value={finish} onChange={(e) => changeFinish(e.target.value as Finish)}>
+              {FINISHES.filter((f) => f !== "bulb" || cellType === "dotmatrix").map((f) => (
+                <option key={f} value={f}>
+                  {FINISH_LABELS[f]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {cellType === "segment" && (
           <label>
             Segments

@@ -1,6 +1,22 @@
-import { DEFAULT_COLOURS, type AreaCell, type AreaCellType, type CellType, type FieldArea, type ListArea } from "../board/layout";
+import {
+  DEFAULT_COLOURS,
+  FINISH_COLOURS,
+  FINISHES,
+  type AreaCell,
+  type AreaCellType,
+  type CellType,
+  type FieldArea,
+  type Finish,
+  type ListArea,
+} from "../board/layout";
 import { FONTS } from "../fonts";
 import { OptionalColour } from "./StaticAreasPanel";
+
+const FINISH_LABELS: Record<Finish, string> = {
+  led: "LED",
+  vfd: "VFD (vacuum fluorescent)",
+  bulb: "Lightbulbs",
+};
 
 const TYPE_LABELS: Record<AreaCellType, string> = {
   splitflap: "Split-flap",
@@ -117,7 +133,11 @@ function CellStyle({
       {type ? (
         <label className="inline">
           {type === "text" ? "Text" : "Colour"}
-          <input type="color" value={toHex(cell?.color ?? DEFAULT_COLOURS[type])} onChange={(e) => set({ color: e.target.value })} />
+          <input
+            type="color"
+            value={toHex(cell?.color ?? (cell?.finish ? FINISH_COLOURS[cell.finish] : undefined) ?? DEFAULT_COLOURS[type])}
+            onChange={(e) => set({ color: e.target.value })}
+          />
         </label>
       ) : (
         // The board's cells: its colour, unless the area is given one of its own.
@@ -130,6 +150,21 @@ function CellStyle({
           fallback={drawnAs === "splitflap" ? "#1d1d1f" : drawnAs === "flipdot" ? "#1c1c1c" : "#1b1b1d"}
           onChange={(background) => set({ background })}
         />
+      )}
+      {(drawnAs === "dotmatrix" || drawnAs === "segment") && (
+        <select
+          value={cell?.finish ?? ""}
+          // A finish brings its own colour, so a colour chosen for the old one goes.
+          onChange={(e) => set({ finish: (e.target.value || undefined) as Finish | undefined, color: undefined })}
+          aria-label="Finish"
+        >
+          <option value="">{type ? "LED" : "Board's finish"}</option>
+          {FINISHES.filter((f) => (type ? f !== "led" : true) && (f !== "bulb" || drawnAs === "dotmatrix")).map((f) => (
+            <option key={f} value={f}>
+              {FINISH_LABELS[f]}
+            </option>
+          ))}
+        </select>
       )}
       {(type === "splitflap" || type === "text") && (
         <select value={cell?.fontFamily ?? ""} onChange={(e) => set({ fontFamily: e.target.value || undefined })} aria-label="Typeface">

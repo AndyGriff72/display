@@ -8,6 +8,17 @@
  */
 
 import type { SoundStyle } from "../audio/flapSound";
+import type { Finish } from "../cells/types";
+
+export type { Finish };
+
+export const FINISHES = ["led", "vfd", "bulb"] as const;
+
+/** The colour each finish is best known in, used when it is chosen and no colour is. */
+export const FINISH_COLOURS: Partial<Record<Finish, string>> = {
+  vfd: "#5effd2",
+  bulb: "#ffc861",
+};
 
 export const CELL_TYPES = ["splitflap", "dotmatrix", "segment", "flipdot"] as const;
 export type CellType = (typeof CELL_TYPES)[number];
@@ -48,6 +59,8 @@ export interface AreaCell {
   segments?: 7 | 14;
   /** Text: size in pixels. Defaults to about 60% of a cell's height. */
   fontSize?: number;
+  /** Dot matrix and segment: LED, VFD, or lightbulbs (dot matrix only). */
+  finish?: Finish;
   /**
    * Split-flap: the colour of the flaps. Flip-dot: the colour of the discs' dark side. Text: a
    * colour behind the text, which otherwise lets the board show through. (Dot matrix and
@@ -75,6 +88,8 @@ export interface CellSettings {
   flipMs?: number;
   /** Segment: 7 for digits, 14 for text. */
   segments?: 7 | 14;
+  /** Dot matrix and segment: LED (the default), VFD, or lightbulbs (dot matrix only). */
+  finish?: Finish;
 }
 
 /** A fixed part of the board, with no character cells: a logo or other image, or fixed text. */
@@ -258,6 +273,7 @@ export function validateLayout(layout: BoardLayout): string[] {
   if (cell?.segments !== undefined && cell.segments !== 7 && cell.segments !== 14) {
     errors.push("Segments must be 7 or 14.");
   }
+  errors.push(...finishProblems("The board's cells", cell?.finish, cell?.type));
 
   if (layout.pageSeconds !== undefined && !(typeof layout.pageSeconds === "number" && layout.pageSeconds >= 0)) {
     errors.push("pageSeconds must be a number of seconds, or 0 to stay on the first page.");
@@ -383,5 +399,17 @@ function areaCellProblems(name: string, cell: AreaCell | undefined): string[] {
   if (cell.fontSize !== undefined && !(typeof cell.fontSize === "number" && cell.fontSize >= 4 && cell.fontSize <= 400)) {
     problems.push(`${name}: fontSize must be a number of pixels, from 4 to 400.`);
   }
+  problems.push(...finishProblems(name, cell.finish, cell.type));
   return problems;
+}
+
+function finishProblems(name: string, finish: unknown, type: unknown): string[] {
+  if (finish === undefined) return [];
+  if (!FINISHES.includes(finish as Finish)) {
+    return [`${name}: finish must be one of ${FINISHES.map((f) => `"${f}"`).join(", ")}.`];
+  }
+  if (finish === "bulb" && type === "segment") {
+    return [`${name}: the lightbulb finish is for dot matrix only.`];
+  }
+  return [];
 }

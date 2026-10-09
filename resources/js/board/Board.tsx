@@ -71,9 +71,9 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
         };
         switch (spec.type) {
           case "dotmatrix":
-            return <DotMatrixCell key={key} {...common} />;
+            return <DotMatrixCell key={key} {...common} finish={spec.finish} />;
           case "segment":
-            return <SegmentCell key={key} {...common} segments={spec.segments} />;
+            return <SegmentCell key={key} {...common} segments={spec.segments} finish={spec.finish} />;
           case "flipdot":
             return <FlipDotCell key={key} {...common} background={spec.background} sweepIndex={x} onFlip={onDotFlips} />;
           default:

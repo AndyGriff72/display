@@ -411,3 +411,45 @@ describe("static text", () => {
     ).toEqual(['Static area "s": text must be written in quotes.', 'Static area "s": fontSize must be a number of pixels, from 4 to 400.']);
   });
 });
+
+describe("finishes", () => {
+  const dots = { type: "dotmatrix", width: 30, height: 50, color: "#5effd2", finish: "vfd" } as const;
+
+  it("gives areas the board's finish, or their own with its colour", () => {
+    const specs = cellSpecs({
+      columns: 15,
+      rows: 1,
+      cell: dots,
+      fields: [
+        { id: "board", area: "0,0 to 4,0" },
+        { id: "bulbs", area: "5,0 to 9,0", cell: { finish: "bulb" } },
+        { id: "led", area: "10,0 to 14,0", cell: { type: "dotmatrix", finish: "led", color: "#ff0000" } },
+      ],
+    });
+    expect(specs.get("0,0")).toMatchObject({ type: "dotmatrix", finish: "vfd", color: "#5effd2" });
+    expect(specs.get("5,0")).toMatchObject({ finish: "bulb", color: "#ffc861" });
+    expect(specs.get("10,0")).toMatchObject({ finish: "led", color: "#ff0000" });
+  });
+
+  it("gives a different type its own default colour, and no finish to types without one", () => {
+    const specs = cellSpecs({
+      columns: 10,
+      rows: 1,
+      cell: dots,
+      fields: [
+        { id: "segs", area: "0,0 to 4,0", cell: { type: "segment" } },
+        { id: "flaps", area: "5,0 to 9,0", cell: { type: "splitflap" } },
+      ],
+    });
+    expect(specs.get("0,0")).toMatchObject({ type: "segment", color: "#ff3b1f" });
+    expect(specs.get("0,0")?.finish).toBeUndefined();
+    expect(specs.get("5,0")?.finish).toBeUndefined();
+  });
+
+  it("draws lightbulbs on segments as LED, and says they are for dot matrix only", () => {
+    const layout: BoardLayout = { columns: 5, rows: 1, cell: dots, fields: [{ id: "s", area: "0,0 to 4,0", cell: { type: "segment", finish: "bulb" } }] };
+    expect(cellSpecs(layout).get("0,0")?.finish).toBe("led");
+    expect(validateLayout(layout)).toEqual(['Field "s": the lightbulb finish is for dot matrix only.']);
+    expect(validateLayout({ ...layout, fields: [], cell: { ...dots, finish: "neon" as "led" } })[0]).toContain("finish must be one of");
+  });
+});

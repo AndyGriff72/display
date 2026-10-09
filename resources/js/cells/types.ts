@@ -20,3 +20,10 @@ export interface CellProps {
   className?: string;
   style?: CSSProperties;
 }
+
+/**
+ * How lit cells (dot matrix, segments) are drawn: "led", the default; "vfd", a vacuum
+ * fluorescent display's blue-green phosphor behind a fine wire mesh; or "bulb", a grid of
+ * lightbulbs that warm up and fade (dot matrix only).
+ */
+export type Finish = "led" | "vfd" | "bulb";
