@@ -4,8 +4,8 @@ import { SegmentCell } from "../cells/segment/SegmentCell";
 import { SplitFlapCell } from "../cells/splitflap/SplitFlapCell";
 import { FONTS, loadFont } from "../fonts";
 import type { Row } from "./binding";
-import { cellSpecs, composeBoard, fontsUsed, textBlocks, type TextBlock } from "./compose";
-import { parseArea, type BoardLayout, type Rect } from "./layout";
+import { cellSpecs, composeBoard, fontsUsed, resolveStaticText, textBlocks, type TextBlock } from "./compose";
+import { parseArea, type BoardLayout, type Rect, type StaticArea } from "./layout";
 import "./Board.css";
 
 export interface BoardProps {
@@ -88,14 +88,20 @@ export function Board({ layout, values, records = [], page = 0, onFlap, showArea
       {texts.map((t) => (
         <TextArea key={t.key} block={t} />
       ))}
-      {statics.map(({ id, rect, image, fit, padding, background, border, borderWidth }) => (
+      {statics.map((s) => (
         <div
-          key={id}
+          key={s.id}
           className="board-static"
-          style={{ ...gridArea(rect), padding, background, border: border ? `${borderWidth ?? 1}px solid ${border}` : undefined }}
+          style={{
+            ...gridArea(s.rect),
+            padding: s.padding,
+            background: s.background,
+            border: s.border ? `${s.borderWidth ?? 1}px solid ${s.border}` : undefined,
+          }}
         >
-          {image && <img className="board-static-image" src={image} alt="" style={{ objectFit: fit ?? "contain" }} />}
-          {showAreas && <span className="board-area-label">{id}</span>}
+          {s.image && <img className="board-static-image" src={s.image} alt="" style={{ objectFit: s.fit ?? "contain" }} />}
+          {typeof s.text === "string" && s.text !== "" && <StaticText area={s} rect={s.rect} board={layout} />}
+          {showAreas && <span className="board-area-label">{s.id}</span>}
         </div>
       ))}
       {fields.map(({ id, rect }) => (
@@ -127,6 +133,26 @@ function TextArea({ block }: { block: TextBlock }) {
       }}
     >
       <span>{block.text}</span>
+    </div>
+  );
+}
+
+/** A static area's fixed text, filling the area, laid over any image. */
+function StaticText({ area, rect, board }: { area: StaticArea; rect: Rect; board: BoardLayout }) {
+  const style = resolveStaticText(board.cell, area);
+  const align = area.align ?? "left";
+  return (
+    <div
+      className={`board-static-text${rect.y2 > rect.y1 ? " board-text-wrap" : ""}`}
+      style={{
+        color: style.color,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        textAlign: align,
+        justifyContent: align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start",
+      }}
+    >
+      <span>{area.text}</span>
     </div>
   );
 }

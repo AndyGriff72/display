@@ -75,7 +75,7 @@ export interface CellSettings {
   segments?: 7 | 14;
 }
 
-/** A fixed part of the board, with no character cells: a logo or other image. */
+/** A fixed part of the board, with no character cells: a logo or other image, or fixed text. */
 export interface StaticArea {
   id: string;
   area: string;
@@ -95,6 +95,19 @@ export interface StaticArea {
   border?: string;
   /** Border width in pixels, when there is a border. Defaults to 1. */
   borderWidth?: number;
+  /**
+   * Fixed text, shown as written (no columns from data: that is what fields are for). One row
+   * high it stays on one line and ends "…" when too long; taller, it wraps, and a new line in
+   * the text starts a new line.
+   */
+  text?: string;
+  /** Text colour. Any CSS colour; defaults to DEFAULT_COLOURS.text. */
+  color?: string;
+  /** Text typeface. Defaults to the board's. */
+  fontFamily?: string;
+  /** Text size in pixels. Defaults to about 60% of a cell's height. */
+  fontSize?: number;
+  align?: "left" | "right" | "center";
 }
 
 /** A named part of the board that data is written into, e.g. "destination" or "platform". */
@@ -281,6 +294,12 @@ export function validateLayout(layout: BoardLayout): string[] {
     if (rect) statics.push({ id: s.id, rect });
     if (s.fit !== undefined && !FITS.includes(s.fit)) {
       errors.push(`Static area "${s.id}": fit must be one of ${FITS.map((f) => `"${f}"`).join(", ")}.`);
+    }
+    if (s.text !== undefined && typeof s.text !== "string") {
+      errors.push(`Static area "${s.id}": text must be written in quotes.`);
+    }
+    if (s.fontSize !== undefined && !(typeof s.fontSize === "number" && s.fontSize >= 4 && s.fontSize <= 400)) {
+      errors.push(`Static area "${s.id}": fontSize must be a number of pixels, from 4 to 400.`);
     }
   }
   for (const f of layout.fields ?? []) {

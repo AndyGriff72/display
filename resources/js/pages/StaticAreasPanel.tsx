@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { apiError } from "../api/client";
 import { deleteImage, listImages, uploadImage, type UploadedImage } from "../api/images";
-import type { StaticArea } from "../board/layout";
+import { DEFAULT_COLOURS, type StaticArea } from "../board/layout";
+import { FONTS } from "../fonts";
 
 const FITS: { value: NonNullable<StaticArea["fit"]>; label: string }[] = [
   { value: "contain", label: "Show all of it" },
@@ -13,7 +14,16 @@ const FITS: { value: NonNullable<StaticArea["fit"]>; label: string }[] = [
  * The board's static areas, edited with controls rather than in the layout's JSON: where each
  * one is, and the image it shows (uploaded here, chosen from earlier uploads, or by address).
  */
-export function StaticAreasPanel({ statics, onChange }: { statics: StaticArea[]; onChange: (statics: StaticArea[]) => void }) {
+export function StaticAreasPanel({
+  statics,
+  cellHeight,
+  onChange,
+}: {
+  statics: StaticArea[];
+  /** The board's cell height, which text is sized from unless given a size. */
+  cellHeight: number;
+  onChange: (statics: StaticArea[]) => void;
+}) {
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [newId, setNewId] = useState("");
@@ -76,7 +86,15 @@ export function StaticAreasPanel({ statics, onChange }: { statics: StaticArea[];
             className="static-preview"
             style={{ background: s.background ?? "#0c0c0d", border: s.border ? `${s.borderWidth ?? 1}px solid ${s.border}` : undefined }}
           >
-            {s.image ? <img src={s.image} alt="" style={{ objectFit: s.fit ?? "contain" }} /> : <span className="hint">no image</span>}
+            {isText(s) ? (
+              <span className="static-preview-text" style={{ color: s.color ?? DEFAULT_COLOURS.text, fontFamily: s.fontFamily }}>
+                {s.text || "text"}
+              </span>
+            ) : s.image ? (
+              <img src={s.image} alt="" style={{ objectFit: s.fit ?? "contain" }} />
+            ) : (
+              <span className="hint">no image</span>
+            )}
           </div>
           <div className="static-controls">
             <div className="row-editor">
@@ -86,27 +104,93 @@ export function StaticAreasPanel({ statics, onChange }: { statics: StaticArea[];
                 ×
               </button>
             </div>
-            <ImageChooser image={s.image} images={images} onChoose={(image) => update(i, { image })} onUpload={(file) => upload(i, file)} />
             <div className="row-editor">
-              <select value={s.fit ?? "contain"} onChange={(e) => update(i, { fit: e.target.value as StaticArea["fit"] })} aria-label="Fit">
-                {FITS.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
               <label className="inline">
-                Padding
-                <input
-                  type="number"
-                  min={0}
-                  max={200}
-                  value={s.padding ?? 0}
-                  onChange={(e) => update(i, { padding: Number(e.target.value) || undefined })}
-                  style={{ width: 64 }}
-                />
+                Shows
+                <select
+                  value={isText(s) ? "text" : "image"}
+                  onChange={(e) =>
+                    // Switching clears what the other kind used, so a text area carries no
+                    // stale image and an image area no stale text settings.
+                    update(
+                      i,
+                      e.target.value === "text"
+                        ? { text: s.text ?? "", image: undefined, fit: undefined, padding: undefined }
+                        : { text: undefined, color: undefined, fontFamily: undefined, fontSize: undefined, align: undefined }
+                    )
+                  }
+                  aria-label="Shows"
+                >
+                  <option value="image">An image</option>
+                  <option value="text">Text</option>
+                </select>
               </label>
             </div>
+            {isText(s) ? (
+              <>
+                <textarea
+                  rows={2}
+                  value={s.text ?? ""}
+                  onChange={(e) => update(i, { text: e.target.value })}
+                  placeholder="The text to show"
+                  aria-label="Text"
+                />
+                <div className="row-editor">
+                  <label className="inline">
+                    Text
+                    <input type="color" value={s.color ?? DEFAULT_COLOURS.text} onChange={(e) => update(i, { color: e.target.value })} />
+                  </label>
+                  <select value={s.fontFamily ?? ""} onChange={(e) => update(i, { fontFamily: e.target.value || undefined })} aria-label="Typeface">
+                    <option value="">Board's typeface</option>
+                    {FONTS.map((f) => (
+                      <option key={f.id} value={f.family}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="inline">
+                    Size
+                    <input
+                      type="number"
+                      min={4}
+                      max={400}
+                      value={s.fontSize ?? Math.round(cellHeight * 0.6)}
+                      onChange={(e) => update(i, { fontSize: Number(e.target.value) || undefined })}
+                      style={{ width: 60 }}
+                    />
+                  </label>
+                  <select value={s.align ?? "left"} onChange={(e) => update(i, { align: e.target.value as StaticArea["align"] })} aria-label="Alignment">
+                    <option value="left">Left</option>
+                    <option value="center">Centre</option>
+                    <option value="right">Right</option>
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <ImageChooser image={s.image} images={images} onChoose={(image) => update(i, { image })} onUpload={(file) => upload(i, file)} />
+                <div className="row-editor">
+                  <select value={s.fit ?? "contain"} onChange={(e) => update(i, { fit: e.target.value as StaticArea["fit"] })} aria-label="Fit">
+                    {FITS.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="inline">
+                    Padding
+                    <input
+                      type="number"
+                      min={0}
+                      max={200}
+                      value={s.padding ?? 0}
+                      onChange={(e) => update(i, { padding: Number(e.target.value) || undefined })}
+                      style={{ width: 64 }}
+                    />
+                  </label>
+                </div>
+              </>
+            )}
             <div className="row-editor">
               <OptionalColour label="Background" value={s.background} fallback="#1f3a6b" onChange={(background) => update(i, { background })} />
               <OptionalColour label="Border" value={s.border} fallback="#8a8a8a" onChange={(border) => update(i, { border })} />
@@ -246,10 +330,16 @@ export function OptionalColour({
   );
 }
 
+/** Whether a static area shows text rather than an image. */
+function isText(s: StaticArea): boolean {
+  return typeof s.text === "string";
+}
+
 /** Leave settings that have been cleared out of the layout, rather than saving them empty. */
 function withoutEmpty(s: StaticArea): StaticArea {
   const out = { ...s } as Record<string, unknown>;
-  for (const key of ["image", "fit", "padding", "background", "border", "borderWidth"]) {
+  // Text is kept even when empty: it is what marks the area as showing text.
+  for (const key of ["image", "fit", "padding", "background", "border", "borderWidth", "color", "fontFamily", "fontSize", "align"]) {
     if (out[key] === undefined || out[key] === "") delete out[key];
   }
   return out as unknown as StaticArea;

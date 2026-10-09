@@ -22,6 +22,7 @@ import {
   type ListArea,
   type ListColumn,
   type Rect,
+  type StaticArea,
 } from "./layout";
 
 /** How one character cell looks: everything a cell component needs but its character. */
@@ -80,6 +81,15 @@ export function resolveText(board: CellSettings, own?: AreaCell): TextSpec {
     fontFamily: own?.fontFamily ?? board.fontFamily ?? FALLBACK_FONT,
     fontSize: own?.fontSize ?? Math.round(board.height * 0.6),
     background: own?.background,
+  };
+}
+
+/** How a static area's text looks: its own settings, the board's typeface, sized from the cells. */
+export function resolveStaticText(board: CellSettings, s: StaticArea): TextSpec {
+  return {
+    color: s.color ?? DEFAULT_COLOURS.text,
+    fontFamily: s.fontFamily ?? board.fontFamily ?? FALLBACK_FONT,
+    fontSize: s.fontSize ?? Math.round(board.height * 0.6),
   };
 }
 
@@ -330,6 +340,7 @@ export function fontsUsed(layout: BoardLayout): string[] {
   if (layout.cell.fontFamily) families.add(layout.cell.fontFamily);
   const add = (cell?: AreaCell) => cell?.fontFamily && families.add(cell.fontFamily);
   (layout.fields ?? []).forEach((f) => add(f.cell));
+  (layout.statics ?? []).forEach((s) => s.fontFamily && families.add(s.fontFamily));
   (layout.lists ?? []).forEach((l) => (Array.isArray(l.columns) ? l.columns : []).forEach((c) => add(c?.cell)));
   return [...families];
 }

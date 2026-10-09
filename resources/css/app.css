@@ -544,7 +544,8 @@ label.inline {
   gap: 12px;
 }
 
-.controls fieldset.static-panel input {
+.controls fieldset.static-panel input,
+.controls fieldset.static-panel textarea {
   text-transform: none;
   font-family: inherit;
 }
@@ -645,4 +646,18 @@ code.chip {
 .controls fieldset.areas-panel input {
   text-transform: none;
   font-family: inherit;
+}
+
+.static-preview-text {
+  padding: 4px;
+  font-size: 14px;
+  text-align: center;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.static-controls textarea {
+  font: inherit;
+  font-size: 14px;
+  text-transform: none;
 }

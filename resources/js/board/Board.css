@@ -87,3 +87,31 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* A static area's fixed text: over the whole area (and any image), lines and "…" as text areas. */
+.board-static-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 0 0.3em;
+  line-height: 1.15;
+}
+
+.board-static-text > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.board-static-text.board-text-wrap {
+  align-items: flex-start;
+  padding-top: 0.15em;
+}
+
+.board-static-text.board-text-wrap > span {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}

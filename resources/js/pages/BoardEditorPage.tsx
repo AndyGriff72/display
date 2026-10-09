@@ -464,7 +464,7 @@ export default function BoardEditorPage() {
           onChange={({ fields, lists }) => replaceShape({ ...shape, ...(shape.fields ? { fields } : {}), ...(shape.lists ? { lists } : {}) })}
         />
 
-        <StaticAreasPanel statics={shape.statics ?? []} onChange={(statics) => replaceShape({ ...shape, statics })} />
+        <StaticAreasPanel statics={shape.statics ?? []} cellHeight={cellHeight} onChange={(statics) => replaceShape({ ...shape, statics })} />
 
         <label className="wide">
           Layout (JSON). Areas are inclusive "column,row to column,row", counting from 0,0 at the top left.

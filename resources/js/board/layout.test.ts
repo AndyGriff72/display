@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellSpecs, composeBoard, headerColours, textBlocks, wrapLine } from "./compose";
+import { cellSpecs, composeBoard, headerColours, resolveStaticText, textBlocks, wrapLine } from "./compose";
 import { DEFAULT_HEADER_COLOR, parseArea, validateLayout, type BoardLayout, type ListArea } from "./layout";
 
 const cell = { type: "splitflap", width: 30, height: 50 } as const;
@@ -376,5 +376,33 @@ describe("areas with their own cell type", () => {
       'Field "a": cell type must be one of "splitflap", "dotmatrix", "segment", "text".',
       'Field "b": fontSize must be a number of pixels, from 4 to 400.',
     ]);
+  });
+});
+
+describe("static text", () => {
+  const board = { type: "splitflap", width: 30, height: 50, fontFamily: '"Oswald", sans-serif' } as const;
+
+  it("takes the board's typeface and a size from the cells unless told otherwise", () => {
+    expect(resolveStaticText(board, { id: "s", area: "0,0", text: "WELCOME" })).toEqual({
+      color: "#f3efe2",
+      fontFamily: '"Oswald", sans-serif',
+      fontSize: 30,
+    });
+    expect(resolveStaticText(board, { id: "s", area: "0,0", text: "WELCOME", color: "#000", fontFamily: '"Inter", sans-serif', fontSize: 20 })).toEqual({
+      color: "#000",
+      fontFamily: '"Inter", sans-serif',
+      fontSize: 20,
+    });
+  });
+
+  it("has no cells under it, like any static area", () => {
+    const cells = composeBoard({ columns: 4, rows: 1, cell: board, unusedCells: "blank", statics: [{ id: "s", area: "0,0 to 1,0", text: "HI" }] }, {});
+    expect([...cells.keys()]).toEqual(["2,0", "3,0"]);
+  });
+
+  it("reports text and sizes that are not the right kind", () => {
+    expect(
+      validateLayout({ columns: 4, rows: 1, cell: board, statics: [{ id: "s", area: "0,0", text: 5 as unknown as string, fontSize: 2 }] })
+    ).toEqual(['Static area "s": text must be written in quotes.', 'Static area "s": fontSize must be a number of pixels, from 4 to 400.']);
   });
 });
