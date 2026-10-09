@@ -7,6 +7,8 @@
 .sf-cell {
   --sf-bg: #1d1d1f;
   --sf-bg-edge: #111;
+  --sf-bg-a: #191919;
+  --sf-bg-b: #141414;
   --sf-fg: #f3efe2;
   --sf-gap: max(1px, calc(var(--sf-h) * 0.02));
   --sf-radius: calc(var(--sf-w) * 0.08);
@@ -37,15 +39,22 @@
 
 .sf-top {
   top: 0;
+  border-top: 1px solid #272727;
+  border-left: 1px solid #272727;
+
   border-radius: var(--sf-radius) var(--sf-radius) 0 0;
-  background: linear-gradient(to bottom, var(--sf-bg), var(--sf-bg-edge));
+  background: linear-gradient(to bottom, var(--sf-bg-a), var(--sf-bg-b));
   transform-origin: 50% calc(100% + var(--sf-gap) / 2);
 }
 
 .sf-bottom {
   bottom: 0;
+
+  border-top: 1px solid #272727;
+  border-left: 1px solid #272727;
+
   border-radius: 0 0 var(--sf-radius) var(--sf-radius);
-  background: linear-gradient(to top, var(--sf-bg), var(--sf-bg-edge));
+  background: linear-gradient(to top, var(--sf-bg-a), var(--sf-bg-b));
   transform-origin: 50% calc(var(--sf-gap) / -2);
 }
 
