@@ -7,11 +7,9 @@ import { DEFAULT_SOUND_STYLE, flapSound, SOUND_STYLE_LABELS, SOUND_STYLES, type 
 import { bindFields, templateColumns, type Row } from "../board/binding";
 import { Board } from "../board/Board";
 import {
-  CELL_TYPES,
   DEFAULT_PAGE_SECONDS,
   parseArea,
   FINISH_COLOURS,
-  FINISHES,
   validateLayout,
   type BoardLayout,
   type CellType,
@@ -25,19 +23,7 @@ import { FONTS, loadFont } from "../fonts";
 import { SAMPLE_RECORDS, SAMPLES, type LayoutShape } from "./boardSamples";
 import { AreasPanel } from "./AreasPanel";
 import { StaticAreasPanel } from "./StaticAreasPanel";
-
-const CELL_TYPE_LABELS: Record<CellType, string> = {
-  splitflap: "Split-flap",
-  dotmatrix: "Dot matrix",
-  segment: "LED segments",
-  flipdot: "Flip-dot",
-};
-
-const FINISH_LABELS: Record<Finish, string> = {
-  led: "LED",
-  vfd: "VFD (vacuum fluorescent)",
-  bulb: "Lightbulbs",
-};
+import { CELL_LOOKS, lookById, lookId } from "./cellLooks";
 
 /** Each cell type starts in the colour it is best known in. */
 const DEFAULT_COLOURS: Record<CellType, string> = {
@@ -167,9 +153,7 @@ export default function BoardEditorPage() {
     replaceShape(shape.dataSource ? { ...sample.layout, dataSource: shape.dataSource } : sample.layout);
     setCellWidth(sample.cellWidth);
     setCellHeight(sample.cellHeight);
-    const type = sample.cellType ?? "splitflap";
-    if (type !== cellType) changeCellType(type);
-    if (sample.finish) changeFinish(sample.finish);
+    changeLook(lookId(sample.cellType ?? "splitflap", sample.finish));
     setGapX(sample.gapX);
     setGapY(sample.gapY);
   };
@@ -333,18 +317,14 @@ export default function BoardEditorPage() {
     }
   };
 
-  const changeCellType = (type: CellType) => {
-    setCellType(type);
-    // Lightbulbs are dot matrix only; other types have no finish at all.
-    const kept = type === "dotmatrix" || (type === "segment" && finish !== "bulb") ? finish : "led";
-    setFinish(kept);
-    setColour(FINISH_COLOURS[kept] ?? DEFAULT_COLOURS[type]);
-  };
-
-  // A finish brings its own colour, as a new cell type does.
-  const changeFinish = (next: Finish) => {
+  /** Choose from the one list of cell types and finishes (see cellLooks.ts). */
+  const changeLook = (id: string) => {
+    const look = lookById(id);
+    if (!look) return;
+    const next = look.finish ?? "led";
+    setCellType(look.type);
     setFinish(next);
-    setColour(FINISH_COLOURS[next] ?? DEFAULT_COLOURS[cellType]);
+    setColour(FINISH_COLOURS[next] ?? DEFAULT_COLOURS[look.type]);
   };
 
   // Whether the browser is holding the sound back until this page is clicked or typed on.
@@ -507,6 +487,7 @@ export default function BoardEditorPage() {
           fields={shape.fields ?? []}
           lists={shape.lists ?? []}
           boardType={cellType}
+          boardFinish={finish}
           boardColour={colour}
           cellHeight={cellHeight}
           onChange={({ fields, lists }) => replaceShape({ ...shape, ...(shape.fields ? { fields } : {}), ...(shape.lists ? { lists } : {}) })}
@@ -529,10 +510,10 @@ export default function BoardEditorPage() {
 
         <label>
           Cell type
-          <select value={cellType} onChange={(e) => changeCellType(e.target.value as CellType)}>
-            {CELL_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {CELL_TYPE_LABELS[t]}
+          <select value={lookId(cellType, finish)} onChange={(e) => changeLook(e.target.value)}>
+            {CELL_LOOKS.map((look) => (
+              <option key={look.id} value={look.id}>
+                {look.label}
               </option>
             ))}
           </select>
@@ -553,18 +534,6 @@ export default function BoardEditorPage() {
             ))}
           </span>
         </label>
-        {(cellType === "dotmatrix" || cellType === "segment") && (
-          <label>
-            Finish
-            <select value={finish} onChange={(e) => changeFinish(e.target.value as Finish)}>
-              {FINISHES.filter((f) => f !== "bulb" || cellType === "dotmatrix").map((f) => (
-                <option key={f} value={f}>
-                  {FINISH_LABELS[f]}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
         {cellType === "segment" && (
           <label>
             Segments

@@ -87,6 +87,25 @@ class BoardApiTest extends TestCase
             ->assertJsonPath('data.layout.rows', 6);
     }
 
+    public function test_saves_a_board_of_every_cell_type_and_finish(): void
+    {
+        $looks = [
+            ['type' => 'splitflap'],
+            ['type' => 'dotmatrix'],
+            ['type' => 'dotmatrix', 'finish' => 'vfd'],
+            ['type' => 'dotmatrix', 'finish' => 'bulb'],
+            ['type' => 'segment', 'finish' => 'vfd'],
+            ['type' => 'flipdot'],
+        ];
+        foreach ($looks as $look) {
+            $this->postJson('/api/boards', ['name' => 'Look', 'layout' => $this->layout(['cell' => $look + ['width' => 30, 'height' => 40]])])
+                ->assertOk();
+        }
+
+        $this->postJson('/api/boards', ['name' => 'X', 'layout' => $this->layout(['cell' => ['type' => 'dotmatrix', 'finish' => 'neon', 'width' => 30, 'height' => 40]])])
+            ->assertStatus(422);
+    }
+
     public function test_refuses_a_board_without_a_name_or_the_basic_shape(): void
     {
         $this->postJson('/api/boards', ['name' => '', 'layout' => $this->layout()])

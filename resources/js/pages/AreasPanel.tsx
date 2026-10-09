@@ -1,7 +1,6 @@
 import {
   DEFAULT_COLOURS,
   FINISH_COLOURS,
-  FINISHES,
   type AreaCell,
   type AreaCellType,
   type CellType,
@@ -11,20 +10,7 @@ import {
 } from "../board/layout";
 import { FONTS } from "../fonts";
 import { OptionalColour } from "./StaticAreasPanel";
-
-const FINISH_LABELS: Record<Finish, string> = {
-  led: "LED",
-  vfd: "VFD (vacuum fluorescent)",
-  bulb: "Lightbulbs",
-};
-
-const TYPE_LABELS: Record<AreaCellType, string> = {
-  splitflap: "Split-flap",
-  dotmatrix: "Dot matrix",
-  segment: "LED segments",
-  flipdot: "Flip-dot",
-  text: "Text",
-};
+import { CELL_LOOKS, lookById, lookId, lookLabel } from "./cellLooks";
 
 /**
  * Each field and list column's cell style: the board's own cells, or a type and look of its
@@ -34,6 +20,7 @@ export function AreasPanel({
   fields,
   lists,
   boardType,
+  boardFinish,
   boardColour,
   cellHeight,
   onChange,
@@ -41,6 +28,7 @@ export function AreasPanel({
   fields: FieldArea[];
   lists: ListArea[];
   boardType: CellType;
+  boardFinish?: Finish;
   /** The board's character colour, which areas using the board's cells start from. */
   boardColour: string;
   cellHeight: number;
@@ -68,7 +56,7 @@ export function AreasPanel({
           <span className="area-name">
             {f.id} <span className="hint">field · {f.area}</span>
           </span>
-          <CellStyle cell={f.cell} boardType={boardType} boardColour={boardColour} cellHeight={cellHeight} onChange={(cell) => setField(i, cell)} />
+          <CellStyle cell={f.cell} boardType={boardType} boardFinish={boardFinish} boardColour={boardColour} cellHeight={cellHeight} onChange={(cell) => setField(i, cell)} />
         </div>
       ))}
       {lists.map((list, l) =>
@@ -77,7 +65,7 @@ export function AreasPanel({
             <span className="area-name">
               {list.id} › {col.title || col.text || `column ${c + 1}`} <span className="hint">list column {c + 1}</span>
             </span>
-            <CellStyle cell={col.cell} boardType={boardType} boardColour={boardColour} cellHeight={cellHeight} onChange={(cell) => setColumn(l, c, cell)} />
+            <CellStyle cell={col.cell} boardType={boardType} boardFinish={boardFinish} boardColour={boardColour} cellHeight={cellHeight} onChange={(cell) => setColumn(l, c, cell)} />
           </div>
         ))
       )}
@@ -89,17 +77,20 @@ export function AreasPanel({
 function CellStyle({
   cell,
   boardType,
+  boardFinish,
   boardColour,
   cellHeight,
   onChange,
 }: {
   cell?: AreaCell;
   boardType: CellType;
+  boardFinish?: Finish;
   boardColour: string;
   cellHeight: number;
   onChange: (cell: AreaCell | undefined) => void;
 }) {
   const type = cell?.type;
+  const look = type && type !== "text" ? lookId(type, cell?.finish) : type;
   // The type the area is drawn as: its own, or the board's.
   const drawnAs: AreaCellType = type ?? boardType;
   const hasBackground = (t: AreaCellType) => t === "splitflap" || t === "flipdot" || t === "text";
@@ -109,12 +100,15 @@ function CellStyle({
   };
 
   // A new type keeps the colours chosen, where it can use them, but none of the last type's
-  // other settings.
+  // other settings. A different finish brings its own colour, as on the board.
   const changeType = (value: string) => {
-    const next = (value || undefined) as AreaCellType | undefined;
+    const chosen = value === "text" ? { type: "text" as const } : value ? lookById(value) : undefined;
+    const next = chosen?.type;
+    const finish = chosen && "finish" in chosen ? chosen.finish : undefined;
     const kept = tidy({
       type: next,
-      color: cell?.color,
+      finish,
+      color: finish !== cell?.finish ? undefined : cell?.color,
       background: hasBackground(next ?? boardType) ? cell?.background : undefined,
     });
     onChange(Object.keys(kept).length ? kept : undefined);
@@ -122,13 +116,14 @@ function CellStyle({
 
   return (
     <span className="row-editor">
-      <select value={type ?? ""} onChange={(e) => changeType(e.target.value)} aria-label="Cell type">
-        <option value="">Board's cells ({TYPE_LABELS[boardType]})</option>
-        {(Object.keys(TYPE_LABELS) as AreaCellType[]).map((t) => (
-          <option key={t} value={t}>
-            {TYPE_LABELS[t]}
+      <select value={look ?? ""} onChange={(e) => changeType(e.target.value)} aria-label="Cell type">
+        <option value="">Board's cells ({lookLabel(boardType, boardFinish)})</option>
+        {CELL_LOOKS.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.label}
           </option>
         ))}
+        <option value="text">Text</option>
       </select>
       {type ? (
         <label className="inline">
@@ -150,21 +145,6 @@ function CellStyle({
           fallback={drawnAs === "splitflap" ? "#1d1d1f" : drawnAs === "flipdot" ? "#1c1c1c" : "#1b1b1d"}
           onChange={(background) => set({ background })}
         />
-      )}
-      {(drawnAs === "dotmatrix" || drawnAs === "segment") && (
-        <select
-          value={cell?.finish ?? ""}
-          // A finish brings its own colour, so a colour chosen for the old one goes.
-          onChange={(e) => set({ finish: (e.target.value || undefined) as Finish | undefined, color: undefined })}
-          aria-label="Finish"
-        >
-          <option value="">{type ? "LED" : "Board's finish"}</option>
-          {FINISHES.filter((f) => (type ? f !== "led" : true) && (f !== "bulb" || drawnAs === "dotmatrix")).map((f) => (
-            <option key={f} value={f}>
-              {FINISH_LABELS[f]}
-            </option>
-          ))}
-        </select>
       )}
       {(type === "splitflap" || type === "text") && (
         <select value={cell?.fontFamily ?? ""} onChange={(e) => set({ fontFamily: e.target.value || undefined })} aria-label="Typeface">
