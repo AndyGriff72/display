@@ -27,6 +27,7 @@ const CELL_TYPE_LABELS: Record<CellType, string> = {
   splitflap: "Split-flap",
   dotmatrix: "Dot matrix",
   segment: "LED segments",
+  flipdot: "Flip-dot",
 };
 
 /** Each cell type starts in the colour it is best known in. */
@@ -34,6 +35,7 @@ const DEFAULT_COLOURS: Record<CellType, string> = {
   splitflap: "#f3efe2",
   dotmatrix: "#ffb000",
   segment: "#ff3b1f",
+  flipdot: "#ffd21f",
 };
 
 const COLOUR_PRESETS = [
@@ -49,6 +51,7 @@ const BUILT_IN = "__sample__";
 const TYPED = "__typed__";
 
 const playFlap = () => flapSound.play();
+const playDotFlips = (delaysMs: number[]) => flapSound.dotFlips(delaysMs);
 
 /** What is compared to tell whether a board has unsaved changes. */
 const snapshot = (name: string, layout: BoardLayout) => JSON.stringify({ name, layout });
@@ -82,6 +85,9 @@ export default function BoardEditorPage() {
   const [segments, setSegments] = useState<7 | 14>(14);
   const [cellWidth, setCellWidth] = useState(SAMPLES[0].cellWidth);
   const [cellHeight, setCellHeight] = useState(SAMPLES[0].cellHeight);
+  // The gaps between cells, across and down; unset means the usual proportion of the cell.
+  const [gapX, setGapX] = useState<number | undefined>(undefined);
+  const [gapY, setGapY] = useState<number | undefined>(undefined);
   const [flipMs, setFlipMs] = useState(80);
   const [fontId, setFontId] = useState(FONTS[0].id);
   const [stackName, setStackName] = useState<CharsetName>("standard");
@@ -151,6 +157,10 @@ export default function BoardEditorPage() {
     replaceShape(shape.dataSource ? { ...sample.layout, dataSource: shape.dataSource } : sample.layout);
     setCellWidth(sample.cellWidth);
     setCellHeight(sample.cellHeight);
+    const type = sample.cellType ?? "splitflap";
+    if (type !== cellType) changeCellType(type);
+    setGapX(sample.gapX);
+    setGapY(sample.gapY);
   };
 
   const font = FONTS.find((f) => f.id === fontId) ?? FONTS[0];
@@ -164,6 +174,8 @@ export default function BoardEditorPage() {
         type: cellType,
         width: cellWidth,
         height: cellHeight,
+        ...(gapX !== undefined ? { gapX } : {}),
+        ...(gapY !== undefined ? { gapY } : {}),
         color: colour,
         fontFamily: font.family,
         stack: CHARSETS[stackName],
@@ -171,7 +183,7 @@ export default function BoardEditorPage() {
         segments,
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, colour, font, stackName, flipMs, segments]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, segments]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -193,6 +205,8 @@ export default function BoardEditorPage() {
     setSegments(cell.segments ?? 14);
     setCellWidth(cell.width);
     setCellHeight(cell.height);
+    setGapX(cell.gapX);
+    setGapY(cell.gapY);
     setFlipMs(cell.flipMs ?? 80);
     setFontId(FONTS.find((f) => f.family === cell.fontFamily)?.id ?? FONTS[0].id);
     setStackName(
@@ -356,7 +370,7 @@ export default function BoardEditorPage() {
       {boardNotice && <p className={"notice board-notice " + boardNotice.kind}>{boardNotice.text}</p>}
 
       <div className="board-wrap">
-        <Board layout={layout} values={boardValues} records={records} page={page} onFlap={playFlap} showAreas={showAreas} />
+        <Board layout={layout} values={boardValues} records={records} page={page} onFlap={playFlap} onDotFlips={playDotFlips} showAreas={showAreas} />
       </div>
 
       <section className="controls">
@@ -553,6 +567,8 @@ export default function BoardEditorPage() {
         )}
         <Slider label="Cell width" unit="px" value={cellWidth} min={16} max={120} onChange={setCellWidth} />
         <Slider label="Cell height" unit="px" value={cellHeight} min={24} max={180} onChange={setCellHeight} />
+        <Slider label="Gap across" unit="px" value={gapX ?? Math.round(cellWidth * 0.08)} min={0} max={40} onChange={setGapX} />
+        <Slider label="Gap down" unit="px" value={gapY ?? Math.round(cellHeight * 0.12)} min={0} max={40} onChange={setGapY} />
         <Slider label="Volume" value={Math.round(volume * 100)} unit="%" min={0} max={100} onChange={(v) => setVolume(v / 100)} />
       </section>
     </main>

@@ -9,7 +9,7 @@
  */
 
 import recordingUrl from "../../wav/split-flap.wav?url";
-import { SYNTH_STYLE_LABELS, SYNTH_STYLES, synthesiseClickSamples, type SynthStyle } from "./clickSynth";
+import { SYNTH_STYLE_LABELS, SYNTH_STYLES, synthesiseClickSamples, synthesiseDotTickSamples, type SynthStyle } from "./clickSynth";
 
 /** Every sound a board can choose: the recording first, then the synthesised ones. */
 export const SOUND_STYLES = ["recorded", ...SYNTH_STYLES] as const;
@@ -23,6 +23,9 @@ export const SOUND_STYLE_LABELS: Record<SoundStyle, string> = {
 export const DEFAULT_SOUND_STYLE: SoundStyle = "recorded";
 
 const MIN_GAP_MS = 50;
+
+/** Closest two flip-dot ticks may be, in milliseconds: closer ones merge into the rattle. */
+const DOT_GAP_MS = 8;
 const VARIANTS = 8;
 
 /** Playback speed for synthesised flaps (tuned by ear), with a little variation each time. */
@@ -48,6 +51,9 @@ class FlapSound {
   private volume = 0.5;
   private style: SoundStyle = DEFAULT_SOUND_STYLE;
   private listeners = new Set<() => void>();
+  private dotTicks: AudioBuffer[] = [];
+  /** Moments (in DOT_GAP_MS steps) a flip-dot tick is already booked for. */
+  private dotSlots = new Set<number>();
 
   /**
    * Whether the sound is on but the browser is holding it back, as browsers do on a page nobody
@@ -113,6 +119,13 @@ class FlapSound {
     if (!this.ctx) {
       this.ctx = new AudioContext();
       this.ctx.onstatechange = () => this.notify();
+      const ctx = this.ctx;
+      this.dotTicks = Array.from({ length: VARIANTS }, () => {
+        const samples = synthesiseDotTickSamples(ctx.sampleRate);
+        const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+        buffer.getChannelData(0).set(samples);
+        return buffer;
+      });
       this.output = this.ctx.createGain();
       this.output.gain.value = this.volume;
       this.output.connect(this.ctx.destination);
@@ -187,6 +200,33 @@ class FlapSound {
   setVolume(volume: number): void {
     this.volume = volume;
     if (this.output) this.output.gain.value = volume;
+  }
+
+  /**
+   * Flip-dot discs turning over: a tick for each column that turns, at its moment in the sweep
+   * (delays in milliseconds from now). Ticks closer than DOT_GAP_MS to one already booked are
+   * left out, so a whole board changing is a rattle across it rather than a roar.
+   */
+  dotFlips(delaysMs: number[]): void {
+    const ctx = this.ctx;
+    if (!this.enabled || !ctx || !this.output || ctx.state !== "running" || this.dotTicks.length === 0) return;
+
+    const now = ctx.currentTime;
+    if (this.dotSlots.size > 2000) {
+      const past = Math.floor((now * 1000) / DOT_GAP_MS);
+      for (const slot of this.dotSlots) if (slot < past) this.dotSlots.delete(slot);
+    }
+    for (const delay of delaysMs) {
+      const at = now + delay / 1000;
+      const slot = Math.round((at * 1000) / DOT_GAP_MS);
+      if (this.dotSlots.has(slot)) continue;
+      this.dotSlots.add(slot);
+      const source = ctx.createBufferSource();
+      source.buffer = this.dotTicks[Math.floor(Math.random() * this.dotTicks.length)];
+      source.playbackRate.value = 0.9 + Math.random() * 0.2;
+      source.connect(this.output);
+      source.start(at);
+    }
   }
 
   play(): void {

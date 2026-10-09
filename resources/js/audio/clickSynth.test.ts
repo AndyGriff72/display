@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SYNTH_STYLES, synthesiseClickSamples, type SynthStyle } from "./clickSynth";
+import { SYNTH_STYLES, synthesiseClickSamples, synthesiseDotTickSamples, type SynthStyle } from "./clickSynth";
 
 const RATE = 44100;
 
@@ -88,5 +88,21 @@ describe("every style", () => {
       expect(samples.length / RATE).toBeLessThanOrEqual(0.045);
       expect(Math.max(...samples.map(Math.abs))).toBeCloseTo(0.9, 5);
     }
+  });
+});
+
+describe("the flip-dot tick", () => {
+  it("is short, soft and quieter than a flap, since many play together", () => {
+    for (const seed of [1, 2, 3]) {
+      const samples = synthesiseDotTickSamples(RATE, seeded(seed));
+      expect(samples.length / RATE).toBeLessThanOrEqual(0.016);
+      expect(Math.max(...samples.map(Math.abs))).toBeCloseTo(0.55, 5);
+    }
+  });
+
+  it("is a light tick, centred above the flap's low smack", () => {
+    const m = measure(synthesiseDotTickSamples(RATE, seeded(7)));
+    expect(m.centroid).toBeGreaterThan(1500);
+    expect(m.below500).toBeLessThan(0.1);
   });
 });

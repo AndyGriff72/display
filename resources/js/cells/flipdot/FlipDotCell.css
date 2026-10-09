@@ -1,0 +1,72 @@
+/*
+ * A flip-dot character: discs on an even pitch. Each disc is bright (--fd-on) on one side and
+ * dark (--fd-off) on the other. Turning over is drawn as the disc narrowing to its edge, swapping
+ * sides at the halfway point, and opening out again.
+ */
+.fd-cell {
+  display: grid;
+  grid-template-columns: repeat(5, var(--fd-pitch));
+  grid-template-rows: repeat(7, var(--fd-pitch));
+  place-content: center;
+  place-items: center;
+  box-sizing: border-box;
+}
+
+.fd-dot {
+  width: var(--fd-dot);
+  height: var(--fd-dot);
+  border-radius: 50%;
+  background: var(--fd-off);
+  /* A little shading so the discs read as discs, not printed circles. */
+  box-shadow: inset 0 calc(var(--fd-dot) * -0.08) calc(var(--fd-dot) * 0.18) rgba(0, 0, 0, 0.35);
+}
+
+.fd-dot.fd-on {
+  background: var(--fd-on);
+}
+
+/* Turning to bright: dark until halfway, then bright. Each waits for the sweep to reach it. */
+.fd-dot.fd-turn.fd-on {
+  animation: fd-to-on var(--fd-ms) ease-in-out var(--fd-delay, 0ms) both;
+}
+
+/* Turning to dark: the same, the other way round. */
+.fd-dot.fd-turn:not(.fd-on) {
+  animation: fd-to-off var(--fd-ms) ease-in-out var(--fd-delay, 0ms) both;
+}
+
+@keyframes fd-to-on {
+  0%,
+  49.9% {
+    background: var(--fd-off);
+  }
+  0% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(0.06);
+    background: var(--fd-on);
+  }
+  100% {
+    transform: scaleX(1);
+    background: var(--fd-on);
+  }
+}
+
+@keyframes fd-to-off {
+  0%,
+  49.9% {
+    background: var(--fd-on);
+  }
+  0% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(0.06);
+    background: var(--fd-off);
+  }
+  100% {
+    transform: scaleX(1);
+    background: var(--fd-off);
+  }
+}

@@ -33,7 +33,7 @@ export interface CellSpec {
   stack?: string;
   flipMs?: number;
   segments?: 7 | 14;
-  /** Split-flap: the flaps' colour, when not the usual near-black. */
+  /** Split-flap: the flaps' colour. Flip-dot: the discs' dark side. */
   background?: string;
 }
 
@@ -70,7 +70,7 @@ export function resolveCell(board: CellSettings, own?: AreaCell): CellSpec | nul
     stack: own?.stack ?? board.stack,
     flipMs: own?.flipMs ?? board.flipMs,
     segments: own?.segments ?? board.segments,
-    background: type === "splitflap" ? own?.background : undefined,
+    background: type === "splitflap" || type === "flipdot" ? own?.background : undefined,
   };
 }
 

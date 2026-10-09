@@ -9,7 +9,7 @@
 
 import type { SoundStyle } from "../audio/flapSound";
 
-export const CELL_TYPES = ["splitflap", "dotmatrix", "segment"] as const;
+export const CELL_TYPES = ["splitflap", "dotmatrix", "segment", "flipdot"] as const;
 export type CellType = (typeof CELL_TYPES)[number];
 
 /**
@@ -24,6 +24,7 @@ export const DEFAULT_COLOURS: Record<AreaCellType, string> = {
   splitflap: "#f3efe2",
   dotmatrix: "#ffb000",
   segment: "#ff3b1f",
+  flipdot: "#ffd21f",
   text: "#f3efe2",
 };
 
@@ -48,8 +49,9 @@ export interface AreaCell {
   /** Text: size in pixels. Defaults to about 60% of a cell's height. */
   fontSize?: number;
   /**
-   * Split-flap: the colour of the flaps. Text: a colour behind the text, which otherwise lets
-   * the board show through. (Dot matrix and segments are always drawn on black.)
+   * Split-flap: the colour of the flaps. Flip-dot: the colour of the discs' dark side. Text: a
+   * colour behind the text, which otherwise lets the board show through. (Dot matrix and
+   * segments are always drawn on black.)
    */
   background?: string;
 }

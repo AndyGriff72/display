@@ -1,5 +1,6 @@
 import { useEffect, useMemo, type CSSProperties } from "react";
 import { DotMatrixCell } from "../cells/dotmatrix/DotMatrixCell";
+import { FlipDotCell } from "../cells/flipdot/FlipDotCell";
 import { SegmentCell } from "../cells/segment/SegmentCell";
 import { SplitFlapCell } from "../cells/splitflap/SplitFlapCell";
 import { FONTS, loadFont } from "../fonts";
@@ -18,6 +19,8 @@ export interface BoardProps {
   page?: number;
   /** Called each time a flap lands anywhere on the board. */
   onFlap?: () => void;
+  /** Called when flip-dot discs turn, with the delay in milliseconds of each column that turns. */
+  onDotFlips?: (delaysMs: number[]) => void;
   /** Outline the static areas and fields, with their ids, for checking a layout. */
   showAreas?: boolean;
 }
@@ -27,7 +30,7 @@ export interface BoardProps {
  * areas laid over it. Everything is placed on the same CSS grid, so an area covers the gaps
  * between the cells it replaces and the board keeps its shape around it.
  */
-export function Board({ layout, values, records = [], page = 0, onFlap, showAreas }: BoardProps) {
+export function Board({ layout, values, records = [], page = 0, onFlap, onDotFlips, showAreas }: BoardProps) {
   const { cell } = layout;
   const specs = useMemo(() => cellSpecs(layout), [layout]);
   const cells = useMemo(() => composeBoard(layout, values, records, page), [layout, values, records, page]);
@@ -71,6 +74,8 @@ export function Board({ layout, values, records = [], page = 0, onFlap, showArea
             return <DotMatrixCell key={key} {...common} />;
           case "segment":
             return <SegmentCell key={key} {...common} segments={spec.segments} />;
+          case "flipdot":
+            return <FlipDotCell key={key} {...common} background={spec.background} sweepIndex={x} onFlip={onDotFlips} />;
           default:
             return (
               <SplitFlapCell

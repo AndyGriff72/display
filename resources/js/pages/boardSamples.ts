@@ -1,5 +1,5 @@
 import type { Row } from "../board/binding";
-import type { BoardLayout } from "../board/layout";
+import type { BoardLayout, CellType } from "../board/layout";
 
 /** A layout's structure: everything but the cell appearance, which the editor's controls set. */
 export type LayoutShape = Omit<BoardLayout, "cell">;
@@ -10,6 +10,11 @@ export interface Sample {
   layout: LayoutShape;
   cellWidth: number;
   cellHeight: number;
+  /** The board's cell type for this sample; split-flap when not given. */
+  cellType?: CellType;
+  /** Gaps between cells, when the sample needs particular ones. */
+  gapX?: number;
+  gapY?: number;
 }
 
 /**
@@ -58,6 +63,27 @@ export const SAMPLES: Sample[] = [
             { title: "Calling at", text: "{calling_at}", cell: { type: "text", fontSize: 17, fontFamily: '"Inter", sans-serif' } },
           ],
         },
+      ],
+    },
+  },
+  {
+    id: "bus",
+    label: "Flip-dot bus sign",
+    cellWidth: 25,
+    cellHeight: 35,
+    cellType: "flipdot",
+    // One dot's pitch (5px) between characters, so the dots run evenly across the whole sign.
+    gapX: 5,
+    gapY: 5,
+    layout: {
+      columns: 28,
+      rows: 2,
+      pageSeconds: 6,
+      pageFields: true,
+      fields: [
+        { id: "route", area: "0,0 to 2,1", text: "73" },
+        { id: "destination", area: "4,0 to 27,0", text: "{destination}" },
+        { id: "via", area: "4,1 to 27,1", text: "VIA {calling_at}" },
       ],
     },
   },

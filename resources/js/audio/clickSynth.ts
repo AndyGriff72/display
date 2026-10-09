@@ -125,3 +125,23 @@ function normalise(data: Float32Array): Float32Array {
   if (peak > 0) for (let i = 0; i < data.length; i++) data[i] = (data[i] / peak) * 0.9;
   return data;
 }
+
+/**
+ * One flip-dot disc turning over: a soft, short plastic tick, much lighter than a split-flap
+ * landing. A sign changing plays a run of these as its controller sweeps across the columns.
+ * Peaks lower than the flap sounds, since many play close together.
+ */
+export function synthesiseDotTickSamples(rate: number, random: () => number = Math.random): Float32Array {
+  const data = new Float32Array(Math.floor(rate * 0.016));
+  const tick = bandPass(rate, 2600 + random() * 900, 1.4);
+  const body = bandPass(rate, 850 + random() * 250, 1.2);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / rate;
+    const noise = random() * 2 - 1;
+    data[i] = tick(noise) * hit(t, 0, 0.0012) + 0.6 * body(noise) * hit(t, 0, 0.0022);
+  }
+  let peak = 0;
+  for (const v of data) peak = Math.max(peak, Math.abs(v));
+  if (peak > 0) for (let i = 0; i < data.length; i++) data[i] = (data[i] / peak) * 0.55;
+  return data;
+}

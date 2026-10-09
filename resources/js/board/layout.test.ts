@@ -349,6 +349,11 @@ describe("areas with their own cell type", () => {
     expect(specs.get("0,0")).toMatchObject({ type: "splitflap", color: "#ff0000", background: "#003366" });
   });
 
+  it("gives a flip-dot area its yellow by default, and its discs' dark side from background", () => {
+    const specs = cellSpecs({ columns: 5, rows: 1, cell: board, fields: [{ id: "f", area: "0,0 to 4,0", cell: { type: "flipdot", background: "#222" } }] });
+    expect(specs.get("0,0")).toMatchObject({ type: "flipdot", color: "#ffd21f", background: "#222" });
+  });
+
   it("uses a background for split-flaps and text, and ignores one for dot matrix and segments", () => {
     const layout: BoardLayout = {
       columns: 20,
@@ -373,7 +378,7 @@ describe("areas with their own cell type", () => {
       lists: [],
     });
     expect(errors).toEqual([
-      'Field "a": cell type must be one of "splitflap", "dotmatrix", "segment", "text".',
+      'Field "a": cell type must be one of "splitflap", "dotmatrix", "segment", "flipdot", "text".',
       'Field "b": fontSize must be a number of pixels, from 4 to 400.',
     ]);
   });

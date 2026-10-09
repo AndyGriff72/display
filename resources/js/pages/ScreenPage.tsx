@@ -80,7 +80,14 @@ export default function ScreenPage() {
     <div className="screen" ref={outerRef} onDoubleClick={toggleFullScreen}>
       {layout && (
         <div className="screen-board" ref={innerRef} style={{ transform: `scale(${scale})` }}>
-          <Board layout={layout} values={values} records={data.rows} page={page} onFlap={onFlap} />
+          <Board
+            layout={layout}
+            values={values}
+            records={data.rows}
+            page={page}
+            onFlap={onFlap}
+            onDotFlips={onFlap ? (delays) => flapSound.dotFlips(delays) : undefined}
+          />
         </div>
       )}
       {!layout && problem && <p className="screen-message">{problem}</p>}

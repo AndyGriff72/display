@@ -6,6 +6,7 @@ const TYPE_LABELS: Record<AreaCellType, string> = {
   splitflap: "Split-flap",
   dotmatrix: "Dot matrix",
   segment: "LED segments",
+  flipdot: "Flip-dot",
   text: "Text",
 };
 
@@ -85,7 +86,7 @@ function CellStyle({
   const type = cell?.type;
   // The type the area is drawn as: its own, or the board's.
   const drawnAs: AreaCellType = type ?? boardType;
-  const hasBackground = (t: AreaCellType) => t === "splitflap" || t === "text";
+  const hasBackground = (t: AreaCellType) => t === "splitflap" || t === "flipdot" || t === "text";
   const set = (patch: Partial<AreaCell>) => {
     const next = tidy({ ...cell, ...patch });
     onChange(Object.keys(next).length ? next : undefined);
@@ -124,9 +125,9 @@ function CellStyle({
       )}
       {hasBackground(drawnAs) && (
         <OptionalColour
-          label={drawnAs === "splitflap" ? "Flap colour" : "Background"}
+          label={drawnAs === "splitflap" ? "Flap colour" : drawnAs === "flipdot" ? "Dark side" : "Background"}
           value={cell?.background}
-          fallback={drawnAs === "splitflap" ? "#1d1d1f" : "#1b1b1d"}
+          fallback={drawnAs === "splitflap" ? "#1d1d1f" : drawnAs === "flipdot" ? "#1c1c1c" : "#1b1b1d"}
           onChange={(background) => set({ background })}
         />
       )}
