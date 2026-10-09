@@ -21,6 +21,7 @@ export const CELL_LOOKS: CellLook[] = [
   { id: "segment", label: "LED segments", type: "segment" },
   { id: "segment-vfd", label: "VFD segments", type: "segment", finish: "vfd" },
   { id: "flipdot", label: "Flip-dot", type: "flipdot" },
+  { id: "text", label: "Text", type: "text" },
 ];
 
 /** The list entry for a type and finish; LED is the same as no finish. */

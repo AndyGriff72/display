@@ -20,15 +20,16 @@ export const FINISH_COLOURS: Partial<Record<Finish, string>> = {
   bulb: "#ffc861",
 };
 
-export const CELL_TYPES = ["splitflap", "dotmatrix", "segment", "flipdot"] as const;
+/**
+ * What a board, field or list column can be drawn as. All but "text" are grids of character
+ * cells; "text" is ordinary text filling its area, which uses the grid only for size and place.
+ */
+export const CELL_TYPES = ["splitflap", "dotmatrix", "segment", "flipdot", "text"] as const;
 export type CellType = (typeof CELL_TYPES)[number];
 
-/**
- * What a field or list column can be drawn as: any of the board's cell types, or "text", which
- * is not a grid of characters at all but ordinary text filling the area.
- */
-export const AREA_CELL_TYPES = [...CELL_TYPES, "text"] as const;
-export type AreaCellType = (typeof AREA_CELL_TYPES)[number];
+/** The same list, by its older name: areas and the board choose from the same types. */
+export const AREA_CELL_TYPES = CELL_TYPES;
+export type AreaCellType = CellType;
 
 /** The colour each kind of cell is best known in, used when an area gives none. */
 export const DEFAULT_COLOURS: Record<AreaCellType, string> = {
@@ -38,6 +39,9 @@ export const DEFAULT_COLOURS: Record<AreaCellType, string> = {
   flipdot: "#ffd21f",
   text: "#f3efe2",
 };
+
+/** How tall a line of text is, as a multiple of its size, unless an area or board says otherwise. */
+export const DEFAULT_LINE_HEIGHT = 1.15;
 
 /**
  * A field's or list column's own look, over the board's cell settings. Every cell stays the
@@ -61,6 +65,10 @@ export interface AreaCell {
   fontSize?: number;
   /** Dot matrix and segment: LED, VFD, or lightbulbs (dot matrix only). */
   finish?: Finish;
+  /** Text: extra space between characters, in pixels. */
+  letterSpacing?: number;
+  /** Text: the height of a line, as a multiple of the font size. */
+  lineHeight?: number;
   /**
    * Split-flap: the colour of the flaps. Flip-dot: the colour of the discs' dark side. Text: a
    * colour behind the text, which otherwise lets the board show through. (Dot matrix and
@@ -90,6 +98,14 @@ export interface CellSettings {
   segments?: 7 | 14;
   /** Dot matrix and segment: LED (the default), VFD, or lightbulbs (dot matrix only). */
   finish?: Finish;
+  /** Text: size in pixels. Defaults to about 60% of a cell's height. */
+  fontSize?: number;
+  /** Text: a colour behind the text, which otherwise lets the board show through. */
+  background?: string;
+  /** Text: extra space between characters, in pixels (negative draws them closer). */
+  letterSpacing?: number;
+  /** Text: the height of a line, as a multiple of the font size. Defaults to 1.15. */
+  lineHeight?: number;
 }
 
 /** A fixed part of the board, with no character cells: a logo or other image, or fixed text. */

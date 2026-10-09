@@ -392,11 +392,15 @@ describe("static text", () => {
       color: "#f3efe2",
       fontFamily: '"Oswald", sans-serif',
       fontSize: 30,
+      letterSpacing: 0,
+      lineHeight: 1.15,
     });
     expect(resolveStaticText(board, { id: "s", area: "0,0", text: "WELCOME", color: "#000", fontFamily: '"Inter", sans-serif', fontSize: 20 })).toEqual({
       color: "#000",
       fontFamily: '"Inter", sans-serif',
       fontSize: 20,
+      letterSpacing: 0,
+      lineHeight: 1.15,
     });
   });
 
@@ -451,5 +455,36 @@ describe("finishes", () => {
     expect(cellSpecs(layout).get("0,0")?.finish).toBe("led");
     expect(validateLayout(layout)).toEqual(['Field "s": the lightbulb finish is for dot matrix only.']);
     expect(validateLayout({ ...layout, fields: [], cell: { ...dots, finish: "neon" as "led" } })[0]).toContain("finish must be one of");
+  });
+});
+
+describe("a text board", () => {
+  const board = { type: "text", width: 20, height: 30, color: "#00ff00", fontSize: 18, background: "#000088", letterSpacing: 2, lineHeight: 1.5 } as const;
+  const layout: BoardLayout = {
+    columns: 20,
+    rows: 3,
+    cell: board,
+    unusedCells: "blank",
+    fields: [
+      { id: "title", area: "0,0 to 19,0", text: "WELCOME" },
+      { id: "own", area: "0,1 to 19,2", cell: { type: "text", color: "#ffffff", letterSpacing: 0 } },
+    ],
+    lists: [],
+  };
+
+  it("has no cells at all, even where unused positions would be blank", () => {
+    expect(cellSpecs(layout).size).toBe(0);
+    expect(composeBoard(layout, { title: "WELCOME" }).size).toBe(0);
+  });
+
+  it("draws every field as text in the board's style, unless the field sets its own", () => {
+    const [title, own] = textBlocks(layout, { title: "WELCOME", own: "HELLO" });
+    expect(title).toMatchObject({ text: "WELCOME", style: { color: "#00ff00", fontSize: 18, background: "#000088", letterSpacing: 2, lineHeight: 1.5 } });
+    expect(own.style).toMatchObject({ color: "#ffffff", letterSpacing: 0, fontSize: 18 });
+    expect(own.wrap).toBe(true);
+  });
+
+  it("is a valid board", () => {
+    expect(validateLayout(layout)).toEqual([]);
   });
 });

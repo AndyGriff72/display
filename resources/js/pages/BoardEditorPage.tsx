@@ -9,6 +9,7 @@ import { Board } from "../board/Board";
 import {
   DEFAULT_PAGE_SECONDS,
   parseArea,
+  DEFAULT_LINE_HEIGHT,
   FINISH_COLOURS,
   validateLayout,
   type BoardLayout,
@@ -22,7 +23,7 @@ import { normalizeStack } from "../cells/splitflap/flapStack";
 import { FONTS, loadFont } from "../fonts";
 import { SAMPLE_RECORDS, SAMPLES, type LayoutShape } from "./boardSamples";
 import { AreasPanel } from "./AreasPanel";
-import { StaticAreasPanel } from "./StaticAreasPanel";
+import { OptionalColour, StaticAreasPanel } from "./StaticAreasPanel";
 import { CELL_LOOKS, lookById, lookId } from "./cellLooks";
 
 /** Each cell type starts in the colour it is best known in. */
@@ -31,6 +32,7 @@ const DEFAULT_COLOURS: Record<CellType, string> = {
   dotmatrix: "#ffb000",
   segment: "#ff3b1f",
   flipdot: "#ffd21f",
+  text: "#f3efe2",
 };
 
 const COLOUR_PRESETS = [
@@ -79,6 +81,11 @@ export default function BoardEditorPage() {
   const [colour, setColour] = useState(DEFAULT_COLOURS.splitflap);
   const [segments, setSegments] = useState<7 | 14>(14);
   const [finish, setFinish] = useState<Finish>("led");
+  // A text board's own text settings; unset means the defaults (see resolveText).
+  const [textSize, setTextSize] = useState<number | undefined>(undefined);
+  const [textBackground, setTextBackground] = useState<string | undefined>(undefined);
+  const [letterSpacing, setLetterSpacing] = useState<number | undefined>(undefined);
+  const [lineHeight, setLineHeight] = useState<number | undefined>(undefined);
   const [cellWidth, setCellWidth] = useState(SAMPLES[0].cellWidth);
   const [cellHeight, setCellHeight] = useState(SAMPLES[0].cellHeight);
   // The gaps between cells, across and down; unset means the usual proportion of the cell.
@@ -177,9 +184,17 @@ export default function BoardEditorPage() {
         flipMs,
         segments,
         ...(finish !== "led" ? { finish } : {}),
+        ...(cellType === "text"
+          ? {
+              ...(textSize !== undefined ? { fontSize: textSize } : {}),
+              ...(textBackground ? { background: textBackground } : {}),
+              ...(letterSpacing ? { letterSpacing } : {}),
+              ...(lineHeight !== undefined ? { lineHeight } : {}),
+            }
+          : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, segments, finish]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, segments, finish, textSize, textBackground, letterSpacing, lineHeight]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -200,6 +215,10 @@ export default function BoardEditorPage() {
     setColour(cell.color ?? DEFAULT_COLOURS[cell.type]);
     setSegments(cell.segments ?? 14);
     setFinish(cell.finish ?? "led");
+    setTextSize(cell.fontSize);
+    setTextBackground(cell.background);
+    setLetterSpacing(cell.letterSpacing);
+    setLineHeight(cell.lineHeight);
     setCellWidth(cell.width);
     setCellHeight(cell.height);
     setGapX(cell.gapX);
@@ -542,6 +561,44 @@ export default function BoardEditorPage() {
               <option value={7}>7 (digits)</option>
             </select>
           </label>
+        )}
+        {cellType === "text" && (
+          <>
+            <label>
+              Typeface
+              <select value={fontId} onChange={(e) => setFontId(e.target.value)}>
+                {FONTS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Slider
+              label="Text size"
+              unit="px"
+              value={textSize ?? Math.round(cellHeight * 0.6)}
+              min={6}
+              max={200}
+              onChange={setTextSize}
+            />
+            <label>
+              Background
+              <span className="colours">
+                <OptionalColour label="Behind the text" value={textBackground} fallback="#1b1b1d" onChange={setTextBackground} />
+              </span>
+            </label>
+            <Slider label="Letter spacing" unit="px" value={letterSpacing ?? 0} min={-4} max={30} onChange={setLetterSpacing} />
+            <Slider
+              label="Line spacing"
+              unit="×"
+              value={lineHeight ?? DEFAULT_LINE_HEIGHT}
+              min={0.8}
+              max={3}
+              step={0.05}
+              onChange={setLineHeight}
+            />
+          </>
         )}
         {cellType === "splitflap" && (
           <>

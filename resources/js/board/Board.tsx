@@ -133,6 +133,8 @@ function TextArea({ block }: { block: TextBlock }) {
         background: style.background,
         fontFamily: style.fontFamily,
         fontSize: style.fontSize,
+        letterSpacing: style.letterSpacing ? `${style.letterSpacing}px` : undefined,
+        lineHeight: style.lineHeight,
         textAlign: block.align,
         justifyContent: block.align === "right" ? "flex-end" : block.align === "center" ? "center" : "flex-start",
       }}

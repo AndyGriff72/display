@@ -14,6 +14,7 @@ import {
   contains,
   DEFAULT_COLOURS,
   DEFAULT_HEADER_COLOR,
+  DEFAULT_LINE_HEIGHT,
   FINISH_COLOURS,
   type Finish,
   parseArea,
@@ -29,7 +30,8 @@ import {
 
 /** How one character cell looks: everything a cell component needs but its character. */
 export interface CellSpec {
-  type: CellType;
+  /** Any type but text, which has no cells. */
+  type: Exclude<CellType, "text">;
   color: string;
   fontFamily?: string;
   stack?: string;
@@ -47,6 +49,10 @@ export interface TextSpec {
   fontFamily: string;
   fontSize: number;
   background?: string;
+  /** Extra space between characters, in pixels. */
+  letterSpacing: number;
+  /** Line height, as a multiple of the font size. */
+  lineHeight: number;
 }
 
 /** A piece of text drawn over part of the grid: a text field, or one row of a text column. */
@@ -89,11 +95,15 @@ export function resolveCell(board: CellSettings, own?: AreaCell): CellSpec | nul
 
 /** The look of an area drawn as text. */
 export function resolveText(board: CellSettings, own?: AreaCell): TextSpec {
+  // A text board's own settings apply to its text areas; another kind of board's do not.
+  const boardText = board.type === "text";
   return {
-    color: own?.color ?? DEFAULT_COLOURS.text,
+    color: own?.color ?? (boardText ? board.color : undefined) ?? DEFAULT_COLOURS.text,
     fontFamily: own?.fontFamily ?? board.fontFamily ?? FALLBACK_FONT,
-    fontSize: own?.fontSize ?? Math.round(board.height * 0.6),
-    background: own?.background,
+    fontSize: own?.fontSize ?? (boardText ? board.fontSize : undefined) ?? Math.round(board.height * 0.6),
+    background: own?.background ?? (boardText ? board.background : undefined),
+    letterSpacing: own?.letterSpacing ?? (boardText ? board.letterSpacing : undefined) ?? 0,
+    lineHeight: own?.lineHeight ?? (boardText ? board.lineHeight : undefined) ?? DEFAULT_LINE_HEIGHT,
   };
 }
 
@@ -103,6 +113,8 @@ export function resolveStaticText(board: CellSettings, s: StaticArea): TextSpec 
     color: s.color ?? DEFAULT_COLOURS.text,
     fontFamily: s.fontFamily ?? board.fontFamily ?? FALLBACK_FONT,
     fontSize: s.fontSize ?? Math.round(board.height * 0.6),
+    letterSpacing: 0,
+    lineHeight: DEFAULT_LINE_HEIGHT,
   };
 }
 
@@ -137,7 +149,8 @@ const key = (x: number, y: number) => `${x},${y}`;
 export function cellSpecs(layout: BoardLayout): Map<string, CellSpec> {
   const statics = (layout.statics ?? []).map((s) => parseArea(s.area)).filter((r): r is Rect => !!r);
   const isStatic = (x: number, y: number) => statics.some((r) => contains(r, x, y));
-  const board = resolveCell(layout.cell) as CellSpec;
+  // A text board has no cells of its own: its blanks, like its fields and lists, are bare.
+  const board = resolveCell(layout.cell);
   const specs = new Map<string, CellSpec>();
   const put = (x: number, y: number, spec: CellSpec | null) => {
     if (x < 0 || y < 0 || x >= layout.columns || y >= layout.rows || isStatic(x, y)) return;

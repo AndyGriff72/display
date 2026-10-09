@@ -96,6 +96,7 @@ class BoardApiTest extends TestCase
             ['type' => 'dotmatrix', 'finish' => 'bulb'],
             ['type' => 'segment', 'finish' => 'vfd'],
             ['type' => 'flipdot'],
+            ['type' => 'text', 'fontSize' => 20, 'letterSpacing' => 2, 'lineHeight' => 1.4],
         ];
         foreach ($looks as $look) {
             $this->postJson('/api/boards', ['name' => 'Look', 'layout' => $this->layout(['cell' => $look + ['width' => 30, 'height' => 40]])])

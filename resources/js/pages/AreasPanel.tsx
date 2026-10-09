@@ -1,5 +1,6 @@
 import {
   DEFAULT_COLOURS,
+  DEFAULT_LINE_HEIGHT,
   FINISH_COLOURS,
   type AreaCell,
   type AreaCellType,
@@ -123,7 +124,6 @@ function CellStyle({
             {l.label}
           </option>
         ))}
-        <option value="text">Text</option>
       </select>
       {type ? (
         <label className="inline">
@@ -161,6 +161,35 @@ function CellStyle({
           <option value={14}>14 segments</option>
           <option value={7}>7 segments</option>
         </select>
+      )}
+      {type === "text" && (
+        <>
+          <label className="inline">
+            Letters
+            <input
+              type="number"
+              min={-4}
+              max={30}
+              value={cell?.letterSpacing ?? 0}
+              onChange={(e) => set({ letterSpacing: Number(e.target.value) || undefined })}
+              style={{ width: 56 }}
+              title="Extra space between characters, in pixels"
+            />
+          </label>
+          <label className="inline">
+            Lines
+            <input
+              type="number"
+              min={0.8}
+              max={3}
+              step={0.05}
+              value={cell?.lineHeight ?? DEFAULT_LINE_HEIGHT}
+              onChange={(e) => set({ lineHeight: Number(e.target.value) || undefined })}
+              style={{ width: 64 }}
+              title="Line height, as a multiple of the text size"
+            />
+          </label>
+        </>
       )}
       {type === "text" && (
         <label className="inline">

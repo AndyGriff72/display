@@ -63,7 +63,7 @@ class BoardController extends Controller
             'layout.rows' => ['required', 'integer', 'between:1,100'],
             'layout.cell' => ['required', 'array'],
             // Keep in step with CELL_TYPES and FINISHES in resources/js/board/layout.ts.
-            'layout.cell.type' => ['required', 'in:splitflap,dotmatrix,segment,flipdot'],
+            'layout.cell.type' => ['required', 'in:splitflap,dotmatrix,segment,flipdot,text'],
             'layout.cell.finish' => ['sometimes', 'in:led,vfd,bulb'],
             'layout.cell.width' => ['required', 'integer', 'between:4,1000'],
             'layout.cell.height' => ['required', 'integer', 'between:4,1000'],
