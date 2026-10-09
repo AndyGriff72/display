@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { deleteBoard, getBoard, listBoards, saveBoard, type BoardSummary } from "../api/boards";
 import { apiError } from "../api/client";
@@ -311,6 +311,12 @@ export default function BoardEditorPage() {
     setColour(DEFAULT_COLOURS[type]);
   };
 
+  // Whether the browser is holding the sound back until this page is clicked or typed on.
+  const soundHeldBack = useSyncExternalStore(
+    (listener) => flapSound.subscribe(listener),
+    () => flapSound.heldBack
+  );
+
   // The board's sound setting, heard here as it will be on screens.
   useEffect(() => {
     if (soundOn) flapSound.enable();
@@ -397,6 +403,7 @@ export default function BoardEditorPage() {
             ))}
           </select>
           <button onClick={() => flapSound.audition()}>Hear it</button>
+
           <label className="check">
             <input type="checkbox" checked={showAreas} onChange={(e) => setShowAreas(e.target.checked)} />
             Outline areas
@@ -413,6 +420,12 @@ export default function BoardEditorPage() {
             Blank cells in unused positions
           </label>
         </div>
+        {soundHeldBack && (
+          <p className="hint wide sound-held">
+            Your browser is holding the sound back until you click or press a key on this page. Screens do the same unless sound is
+            allowed for this site.
+          </p>
+        )}
 
         {fields.length > 0 && (
           <fieldset className="wide">

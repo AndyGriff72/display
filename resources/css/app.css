@@ -661,3 +661,8 @@ code.chip {
   font-size: 14px;
   text-transform: none;
 }
+
+.sound-held {
+  margin: -8px 0 0;
+  color: #e0b25a;
+}

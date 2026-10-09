@@ -47,6 +47,25 @@ class FlapSound {
   private enabled = false;
   private volume = 0.5;
   private style: SoundStyle = DEFAULT_SOUND_STYLE;
+  private listeners = new Set<() => void>();
+
+  /**
+   * Whether the sound is on but the browser is holding it back, as browsers do on a page nobody
+   * has clicked, tapped or typed on yet. It starts by itself at the first of those.
+   */
+  get heldBack(): boolean {
+    return this.enabled && this.ctx !== null && this.ctx.state !== "running";
+  }
+
+  /** Be told when heldBack may have changed. Returns a function that stops telling. */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify(): void {
+    for (const listener of this.listeners) listener();
+  }
 
   /**
    * Turn the sound on, starting it now if the browser allows.
@@ -61,6 +80,7 @@ class FlapSound {
     this.enabled = true;
     ctx.resume().catch(() => {});
     if (ctx.state !== "running") this.resumeOnFirstInteraction();
+    this.notify();
   }
 
   /** Which sound flaps make: the recording, or a synthesised style (see clickSynth.ts). */
@@ -92,6 +112,7 @@ class FlapSound {
   private context(): AudioContext {
     if (!this.ctx) {
       this.ctx = new AudioContext();
+      this.ctx.onstatechange = () => this.notify();
       this.output = this.ctx.createGain();
       this.output.gain.value = this.volume;
       this.output.connect(this.ctx.destination);
@@ -160,6 +181,7 @@ class FlapSound {
 
   disable(): void {
     this.enabled = false;
+    this.notify();
   }
 
   setVolume(volume: number): void {
