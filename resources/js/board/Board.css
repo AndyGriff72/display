@@ -1,3 +1,14 @@
+/*
+ * Bedstead: a recreation of the Teletext (Ceefax, Oracle) character set, bundled so that boards
+ * and screens look the same on machines that do not have it installed. Fetched only when a board
+ * uses it. See resources/fonts/README.md for where it comes from and its licence.
+ */
+@font-face {
+  font-family: "Bedstead";
+  src: local("Bedstead"), url("../../fonts/bedstead.otf") format("opentype");
+  font-display: swap;
+}
+
 .board {
   --board-bg: #0c0c0d;
 
@@ -74,7 +85,8 @@
 .board-text > span {
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
+  /* Every space as typed: with a fixed-width face like Bedstead, spaces are how a page lines up. */
+  white-space: pre;
   text-overflow: ellipsis;
 }
 
@@ -84,7 +96,7 @@
 }
 
 .board-text-wrap > span {
-  white-space: normal;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
@@ -102,7 +114,7 @@
 .board-static-text > span {
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
+  white-space: pre;
   text-overflow: ellipsis;
 }
 
@@ -112,6 +124,6 @@
 }
 
 .board-static-text.board-text-wrap > span {
-  white-space: pre-line;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

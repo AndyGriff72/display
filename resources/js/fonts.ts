@@ -1,6 +1,7 @@
 /**
  * Typefaces offered for the glyphs. The Google ones are all under the SIL Open Font
  * Licence, so they are free to use and to bundle later if the board needs to run offline.
+ * Bedstead is bundled already (resources/fonts), being in the public domain.
  */
 export interface FontOption {
   id: string;
@@ -24,6 +25,8 @@ export const FONTS: FontOption[] = [
   { id: "source-sans", label: "Source Sans 3", family: '"Source Sans 3", sans-serif', google: "Source+Sans+3:wght@400;600" },
   { id: "lato", label: "Lato", family: '"Lato", sans-serif', google: "Lato:wght@400;700" },
   { id: "merriweather", label: "Merriweather (serif)", family: '"Merriweather", serif', google: "Merriweather:wght@400;700" },
+  // Bundled with the app rather than from Google Fonts: see Board.css and resources/fonts.
+  { id: "bedstead", label: "Bedstead (Teletext)", family: '"Bedstead", monospace' },
 ];
 
 const loaded = new Set<string>();
