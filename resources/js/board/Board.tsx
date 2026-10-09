@@ -1,9 +1,11 @@
-import { useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, type CSSProperties } from "react";
 import { DotMatrixCell } from "../cells/dotmatrix/DotMatrixCell";
 import { SegmentCell } from "../cells/segment/SegmentCell";
 import { SplitFlapCell } from "../cells/splitflap/SplitFlapCell";
+import { FONTS, loadFont } from "../fonts";
 import type { Row } from "./binding";
-import { composeBoard, headerColours, parseArea, type BoardLayout, type Rect } from "./layout";
+import { cellSpecs, composeBoard, fontsUsed, textBlocks, type TextBlock } from "./compose";
+import { parseArea, type BoardLayout, type Rect } from "./layout";
 import "./Board.css";
 
 export interface BoardProps {
@@ -21,19 +23,28 @@ export interface BoardProps {
 }
 
 /**
- * A grid of character cells with static areas cut out of it. Each cell and each static
- * area is placed on the same CSS grid, so a static area covers the gaps between the cells
- * it replaces and the board keeps its shape around it.
+ * A grid of character cells, each drawn as its area's cell type, with static areas and text
+ * areas laid over it. Everything is placed on the same CSS grid, so an area covers the gaps
+ * between the cells it replaces and the board keeps its shape around it.
  */
 export function Board({ layout, values, records = [], page = 0, onFlap, showAreas }: BoardProps) {
   const { cell } = layout;
+  const specs = useMemo(() => cellSpecs(layout), [layout]);
   const cells = useMemo(() => composeBoard(layout, values, records, page), [layout, values, records, page]);
-  const colours = useMemo(() => headerColours(layout), [layout]);
+  const texts = useMemo(() => textBlocks(layout, values, records, page), [layout, values, records, page]);
   const statics = useMemo(() => placedAreas(layout, layout.statics ?? []), [layout]);
   const fields = useMemo(
     () => (showAreas ? placedAreas(layout, [...(layout.fields ?? []), ...(layout.lists ?? [])]) : []),
     [layout, showAreas]
   );
+
+  // Every typeface the board uses, whichever areas use them.
+  useEffect(() => {
+    for (const family of fontsUsed(layout)) {
+      const font = FONTS.find((f) => f.family === family);
+      if (font) loadFont(font);
+    }
+  }, [layout]);
 
   const gridStyle: CSSProperties = {
     gridTemplateColumns: `repeat(${layout.columns}, ${cell.width}px)`,
@@ -45,32 +56,37 @@ export function Board({ layout, values, records = [], page = 0, onFlap, showArea
   return (
     <div className={`board${showAreas ? " board-show-areas" : ""}`} style={gridStyle}>
       {[...cells].map(([key, ch]) => {
+        const spec = specs.get(key);
+        if (!spec) return null;
         const [x, y] = key.split(",").map(Number);
         const common = {
           char: ch,
           width: cell.width,
           height: cell.height,
-          color: colours.get(key) ?? cell.color,
+          color: spec.color,
           style: { gridColumn: x + 1, gridRow: y + 1 },
         };
-        switch (cell.type) {
+        switch (spec.type) {
           case "dotmatrix":
             return <DotMatrixCell key={key} {...common} />;
           case "segment":
-            return <SegmentCell key={key} {...common} segments={cell.segments} />;
+            return <SegmentCell key={key} {...common} segments={spec.segments} />;
           default:
             return (
               <SplitFlapCell
                 key={key}
                 {...common}
-                fontFamily={cell.fontFamily}
-                stack={cell.stack}
-                flipMs={cell.flipMs}
+                fontFamily={spec.fontFamily}
+                stack={spec.stack}
+                flipMs={spec.flipMs}
                 onFlap={onFlap}
               />
             );
         }
       })}
+      {texts.map((t) => (
+        <TextArea key={t.key} block={t} />
+      ))}
       {statics.map(({ id, rect, image, fit, padding, background, border, borderWidth }) => (
         <div
           key={id}
@@ -86,6 +102,30 @@ export function Board({ layout, values, records = [], page = 0, onFlap, showArea
           <span className="board-area-label">{id}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Plain text over an area of the grid. One row high it stays on one line and ends in "…" if too
+ * long; taller, it wraps, and whatever does not fit is cut off at the bottom.
+ */
+function TextArea({ block }: { block: TextBlock }) {
+  const { style } = block;
+  return (
+    <div
+      className={`board-text${block.wrap ? " board-text-wrap" : ""}`}
+      style={{
+        ...gridArea(block.rect),
+        color: style.color,
+        background: style.background,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        textAlign: block.align,
+        justifyContent: block.align === "right" ? "flex-end" : block.align === "center" ? "center" : "flex-start",
+      }}
+    >
+      <span>{block.text}</span>
     </div>
   );
 }

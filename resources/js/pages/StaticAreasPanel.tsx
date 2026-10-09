@@ -226,7 +226,7 @@ function ImageChooser({
  * A colour that may be left out: a switch to have one at all, and the colour when it is on.
  * (A colour picker always shows some colour, so it cannot say "none" by itself.)
  */
-function OptionalColour({
+export function OptionalColour({
   label,
   value,
   fallback,

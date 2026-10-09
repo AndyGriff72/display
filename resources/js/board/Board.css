@@ -55,3 +55,35 @@
 .board-static .board-area-label {
   background: rgba(255, 170, 60, 0.95);
 }
+
+/*
+ * An area drawn as plain text rather than character cells. One row high: a single line,
+ * ending "…" when too long. Taller: wraps, cut off at the bottom.
+ */
+.board-text {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 0.25em;
+  box-sizing: border-box;
+  border-radius: 3px;
+  line-height: 1.15;
+}
+
+.board-text > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.board-text-wrap {
+  align-items: flex-start;
+  padding-top: 0.1em;
+}
+
+.board-text-wrap > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

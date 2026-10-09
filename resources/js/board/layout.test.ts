@@ -1,14 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  composeBoard,
-  DEFAULT_HEADER_COLOR,
-  headerColours,
-  parseArea,
-  validateLayout,
-  wrapLine,
-  type BoardLayout,
-  type ListArea,
-} from "./layout";
+import { cellSpecs, composeBoard, headerColours, textBlocks, wrapLine } from "./compose";
+import { DEFAULT_HEADER_COLOR, parseArea, validateLayout, type BoardLayout, type ListArea } from "./layout";
 
 const cell = { type: "splitflap", width: 30, height: 50 } as const;
 
@@ -264,5 +256,92 @@ describe("lists", () => {
 
   it("reports a page time that is not a number of seconds", () => {
     expect(validateLayout({ columns: 16, rows: 3, cell, pageSeconds: -1 })[0]).toContain("pageSeconds");
+  });
+});
+
+describe("areas with their own cell type", () => {
+  const board = { type: "splitflap", width: 30, height: 50, color: "#f3efe2" } as const;
+  const mixed: BoardLayout = {
+    columns: 20,
+    rows: 3,
+    cell: board,
+    fields: [
+      { id: "clock", area: "0,0 to 4,0", cell: { type: "dotmatrix" } },
+      { id: "title", area: "6,0 to 19,0" },
+      { id: "note", area: "0,2 to 19,2", cell: { type: "text", fontSize: 18, background: "#202020" } },
+    ],
+    lists: [
+      {
+        id: "deps",
+        area: "0,1 to 19,1",
+        columns: [
+          { text: "{t}", width: 5, cell: { type: "segment", segments: 7, color: "#0f0" } },
+          { text: "{dest}", width: 8 },
+          { text: "{calling}", cell: { type: "text" } },
+        ],
+      },
+    ],
+  };
+
+  it("gives each area's cells its own type, the rest the board's", () => {
+    const specs = cellSpecs(mixed);
+    expect(specs.get("0,0")).toMatchObject({ type: "dotmatrix", color: "#ffb000" }); // a different type: its own default colour
+    expect(specs.get("6,0")).toMatchObject({ type: "splitflap", color: "#f3efe2" }); // the board's
+    expect(specs.get("0,1")).toMatchObject({ type: "segment", segments: 7, color: "#0f0" });
+    expect(specs.get("6,1")).toMatchObject({ type: "splitflap" });
+  });
+
+  it("gives text areas no cells at all", () => {
+    const specs = cellSpecs(mixed);
+    for (let x = 0; x < 20; x++) expect(specs.has(`${x},2`)).toBe(false);
+    // The text column runs from 15 to 19; the gap before it takes the split-flap column's look.
+    expect(specs.has("15,1")).toBe(false);
+    expect(specs.get("14,1")).toMatchObject({ type: "splitflap" });
+    expect(composeBoard(mixed, { title: "X" }).has("15,1")).toBe(false);
+  });
+
+  it("leaves the gap between two text columns bare", () => {
+    const specs = cellSpecs({
+      ...mixed,
+      fields: [],
+      lists: [{ id: "l", area: "0,1 to 19,1", columns: [{ text: "{a}", width: 5, cell: { type: "text" } }, { text: "{b}", cell: { type: "text" } }] }],
+    });
+    expect(specs.has("5,1")).toBe(false);
+  });
+
+  it("draws text areas as whole text, not cut to their width in cells", () => {
+    const blocks = textBlocks(mixed, { note: "A NOTE MUCH LONGER THAN TWENTY CHARACTERS" }, [{ t: "14:32", dest: "LONDON", calling: "CREWE, STAFFORD, MILTON KEYNES" }]);
+    const note = blocks.find((b) => b.key === "field:note")!;
+    expect(note.text).toBe("A NOTE MUCH LONGER THAN TWENTY CHARACTERS");
+    expect(note.style).toMatchObject({ fontSize: 18, background: "#202020", color: "#f3efe2" });
+    expect(note.wrap).toBe(false);
+
+    const calling = blocks.find((b) => b.key.startsWith("list:deps:2"))!;
+    expect(calling.text).toBe("CREWE, STAFFORD, MILTON KEYNES");
+    expect(calling.rect).toEqual({ x1: 15, x2: 19, y1: 1, y2: 1 });
+  });
+
+  it("sizes text from the cell height unless told otherwise, and colours a text column's header", () => {
+    const withHeader: BoardLayout = {
+      columns: 10,
+      rows: 3,
+      cell: board,
+      lists: [{ id: "l", area: "0,0 to 9,2", header: true, columns: [{ title: "CALLING AT", text: "{c}", cell: { type: "text" } }] }],
+    };
+    const [header, first] = textBlocks(withHeader, {}, [{ c: "CREWE" }]);
+    expect(header).toMatchObject({ text: "CALLING AT", style: { color: DEFAULT_HEADER_COLOR, fontSize: 30 } });
+    expect(first).toMatchObject({ text: "CREWE", rect: { x1: 0, x2: 9, y1: 1, y2: 1 } });
+  });
+
+  it("reports an area cell type or setting it does not know", () => {
+    const errors = validateLayout({
+      ...mixed,
+      fields: [{ id: "a", area: "0,0 to 4,0", cell: { type: "nixie" as "text" } }, { id: "b", area: "6,0 to 9,0", cell: { fontSize: 1 } }],
+      lists: [],
+    });
+    expect(errors).toEqual([
+      'Field "a": cell type must be one of "splitflap", "dotmatrix", "segment", "text".',
+      'Field "b": fontSize must be a number of pixels, from 4 to 400.',
+    ]);
   });
 });

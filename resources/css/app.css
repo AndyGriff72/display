@@ -611,3 +611,38 @@ code.chip {
   border-radius: 4px;
   background: none;
 }
+
+.controls fieldset.areas-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.areas-panel .area-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+  font-size: 14px;
+}
+
+.areas-panel .area-name {
+  min-width: 200px;
+}
+
+.areas-panel input[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: none;
+}
+
+.controls fieldset.areas-panel input {
+  text-transform: none;
+  font-family: inherit;
+}

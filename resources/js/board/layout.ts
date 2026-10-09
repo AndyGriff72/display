@@ -8,10 +8,48 @@
  */
 
 import type { SoundStyle } from "../audio/clickSynth";
-import { pageOffset, renderTemplate, type Row } from "./binding";
 
 export const CELL_TYPES = ["splitflap", "dotmatrix", "segment"] as const;
 export type CellType = (typeof CELL_TYPES)[number];
+
+/**
+ * What a field or list column can be drawn as: any of the board's cell types, or "text", which
+ * is not a grid of characters at all but ordinary text filling the area.
+ */
+export const AREA_CELL_TYPES = [...CELL_TYPES, "text"] as const;
+export type AreaCellType = (typeof AREA_CELL_TYPES)[number];
+
+/** The colour each kind of cell is best known in, used when an area gives none. */
+export const DEFAULT_COLOURS: Record<AreaCellType, string> = {
+  splitflap: "#f3efe2",
+  dotmatrix: "#ffb000",
+  segment: "#ff3b1f",
+  text: "#f3efe2",
+};
+
+/**
+ * A field's or list column's own look, over the board's cell settings. Every cell stays the
+ * board's width and height, so the grid keeps its pattern; only what is drawn in them changes.
+ * Anything left out comes from the board, apart from colour, which for a different type than the
+ * board's comes from DEFAULT_COLOURS.
+ */
+export interface AreaCell {
+  type?: AreaCellType;
+  /** Character colour (text colour, for text). Any CSS colour. */
+  color?: string;
+  /** Split-flap and text: the typeface. */
+  fontFamily?: string;
+  /** Split-flap: the flap stack. */
+  stack?: string;
+  /** Split-flap: how long one flap takes to fall, in milliseconds. */
+  flipMs?: number;
+  /** Segment: 7 for digits, 14 for text. */
+  segments?: 7 | 14;
+  /** Text: size in pixels. Defaults to about 60% of a cell's height. */
+  fontSize?: number;
+  /** Text: a background colour behind the text. Without one, the board shows through. */
+  background?: string;
+}
 
 /** How every cell on the board looks. Settings that do not apply to the cell type are ignored. */
 export interface CellSettings {
@@ -69,6 +107,8 @@ export interface FieldArea {
   text?: string;
   /** Which row of the data the template reads, counting from 0. Defaults to the first. */
   row?: number;
+  /** Its own cell type and look, instead of the board's. */
+  cell?: AreaCell;
 }
 
 /** One column of a list: what it shows for each record, and how many characters wide it is. */
@@ -80,6 +120,8 @@ export interface ListColumn {
   /** Characters. The last column may leave it out to take whatever width is left. */
   width?: number;
   align?: "left" | "right" | "center";
+  /** Its own cell type and look, instead of the board's. */
+  cell?: AreaCell;
 }
 
 /**
@@ -247,6 +289,7 @@ export function validateLayout(layout: BoardLayout): string[] {
     if (f.row !== undefined && !(Number.isInteger(f.row) && f.row >= 0)) {
       errors.push(`Field "${f.id}": row must be a whole number, counting from 0 for the first row of data.`);
     }
+    errors.push(...areaCellProblems(`Field "${f.id}"`, f.cell));
   }
 
   for (const l of layout.lists ?? []) {
@@ -283,6 +326,7 @@ function listProblems(list: ListArea, rect: Rect | null): string[] {
   list.columns.forEach((c, i) => {
     const which = `${name}, column ${i + 1}`;
     const last = i === list.columns.length - 1;
+    problems.push(...areaCellProblems(which, c?.cell));
     if (typeof c?.text !== "string") problems.push(`${which}: text must be written in quotes, e.g. "{destination}".`);
     if (c?.width === undefined) {
       if (!last) problems.push(`${which}: needs a width. Only the last column may take whatever is left.`);
@@ -302,142 +346,18 @@ function listProblems(list: ListArea, rect: Rect | null): string[] {
   return problems;
 }
 
-/**
- * What every character cell on the board should show, given the text for each field.
- * Keyed "x,y"; cells under a static area are left out, because they do not exist.
- *
- * A field's text fills its area row by row: each line of the text ("\n" separated) goes
- * on the next row of the area, aligned within it. In a field more than one row high, a line
- * too long for the width wraps at spaces onto the next row, since data from a database
- * comes as one line; in a single-row field it is cut off. Whatever does not fit in the
- * area's height is dropped.
- *
- * Only fields and lists have cells: the rest of the board is empty, unless the layout's
- * unusedCells is "blank", which fills it with blank cells as a real board's unused positions are.
- *
- * A list shows the data's records, one per row, starting from page `page` (see pageOffset).
- */
-export function composeBoard(
-  layout: BoardLayout,
-  values: Record<string, string>,
-  records: Row[] = [],
-  page = 0
-): Map<string, string> {
-  const statics = (layout.statics ?? []).map((s) => parseArea(s.area)).filter((r): r is Rect => !!r);
-  const used = [...(layout.fields ?? []), ...(layout.lists ?? [])]
-    .map((a) => parseArea(a.area ?? ""))
-    .filter((r): r is Rect => !!r);
-  const fillUnused = layout.unusedCells === "blank";
-  const cells = new Map<string, string>();
-
-  for (let y = 0; y < layout.rows; y++) {
-    for (let x = 0; x < layout.columns; x++) {
-      if (statics.some((r) => contains(r, x, y))) continue;
-      if (fillUnused || used.some((r) => contains(r, x, y))) cells.set(`${x},${y}`, " ");
-    }
+function areaCellProblems(name: string, cell: AreaCell | undefined): string[] {
+  if (cell === undefined) return [];
+  if (typeof cell !== "object" || cell === null) return [`${name}: cell must be settings in braces, e.g. { "type": "dotmatrix" }.`];
+  const problems: string[] = [];
+  if (cell.type !== undefined && !AREA_CELL_TYPES.includes(cell.type)) {
+    problems.push(`${name}: cell type must be one of ${AREA_CELL_TYPES.map((t) => `"${t}"`).join(", ")}.`);
   }
-
-  for (const field of layout.fields ?? []) {
-    const rect = parseArea(field.area);
-    if (!rect) continue;
-    const width = areaWidth(rect);
-    const height = areaHeight(rect);
-    const text = (values[field.id] ?? "").split("\n");
-    const lines = (height > 1 ? text.flatMap((line) => wrapLine(line, width)) : text).slice(0, height);
-    lines.forEach((line, row) => {
-      const text = alignLine(line, width, field.align ?? "left");
-      for (let i = 0; i < width; i++) {
-        const key = `${rect.x1 + i},${rect.y1 + row}`;
-        if (cells.has(key)) cells.set(key, text[i]);
-      }
-    });
+  if (cell.segments !== undefined && cell.segments !== 7 && cell.segments !== 14) {
+    problems.push(`${name}: segments must be 7 or 14.`);
   }
-
-  for (const list of layout.lists ?? []) {
-    const rect = parseArea(list.area);
-    if (!rect || !Array.isArray(list.columns)) continue;
-    listLines(list, rect, records, page).forEach((line, row) => {
-      for (let i = 0; i < line.length; i++) {
-        const key = `${rect.x1 + i},${rect.y1 + row}`;
-        if (cells.has(key)) cells.set(key, line[i]);
-      }
-    });
+  if (cell.fontSize !== undefined && !(typeof cell.fontSize === "number" && cell.fontSize >= 4 && cell.fontSize <= 400)) {
+    problems.push(`${name}: fontSize must be a number of pixels, from 4 to 400.`);
   }
-
-  return cells;
-}
-
-/**
- * The text of every row of a list, each exactly the list's width: the header, if it has one,
- * then one record per row from the current page, then blanks for rows with no record.
- */
-export function listLines(list: ListArea, rect: Rect, records: Row[], page: number): string[] {
-  const width = areaWidth(rect);
-  const height = areaHeight(rect);
-  const widths = columnWidths(list.columns, width);
-  const line = (texts: string[]) =>
-    alignLine(texts.map((t, i) => alignLine(t, widths[i], list.columns[i].align ?? "left")).join(" "), width, "left");
-
-  const lines: string[] = [];
-  if (list.header) lines.push(line(list.columns.map((c) => c.title ?? "")));
-  const perPage = height - lines.length;
-  const offset = pageOffset(records.length, perPage, page);
-  for (let i = 0; i < perPage; i++) {
-    const record = records[offset + i];
-    lines.push(record ? line(list.columns.map((c) => renderTemplate(String(c.text ?? ""), record))) : " ".repeat(width));
-  }
-  return lines;
-}
-
-/** Each column's width; a last column with none takes what is left of the list's width. */
-function columnWidths(columns: ListColumn[], width: number): number[] {
-  const fixed = columns.map((c) => (Number.isInteger(c.width) && (c.width as number) > 0 ? (c.width as number) : 0));
-  const used = fixed.reduce((a, b) => a + b, 0) + columns.length - 1;
-  return fixed.map((w, i) => (w === 0 ? Math.max(0, i === columns.length - 1 ? width - used : 1) : w));
-}
-
-/** Characters in a list's header rows, and the colour each should be. Keyed "x,y". */
-export function headerColours(layout: BoardLayout): Map<string, string> {
-  const colours = new Map<string, string>();
-  for (const list of layout.lists ?? []) {
-    const rect = parseArea(list.area);
-    if (!rect || !list.header) continue;
-    for (let x = rect.x1; x <= rect.x2; x++) colours.set(`${x},${rect.y1}`, list.headerColor ?? DEFAULT_HEADER_COLOR);
-  }
-  return colours;
-}
-
-/**
- * Break a line into pieces no wider than `width`, at spaces where possible. A single word
- * longer than the width is split where it has to be.
- */
-export function wrapLine(line: string, width: number): string[] {
-  if (line.length <= width) return [line];
-  const pieces: string[] = [];
-  let current = "";
-  for (const word of line.split(" ").filter((w) => w !== "")) {
-    if (current && current.length + 1 + word.length <= width) {
-      current += " " + word;
-      continue;
-    }
-    if (current) pieces.push(current);
-    current = word;
-    while (current.length > width) {
-      pieces.push(current.slice(0, width));
-      current = current.slice(width);
-    }
-  }
-  if (current) pieces.push(current);
-  return pieces.length ? pieces : [""];
-}
-
-function alignLine(line: string, width: number, align: "left" | "right" | "center"): string {
-  const text = line.slice(0, width);
-  const spare = width - text.length;
-  if (align === "right") return " ".repeat(spare) + text;
-  if (align === "center") {
-    const before = Math.floor(spare / 2);
-    return " ".repeat(before) + text + " ".repeat(spare - before);
-  }
-  return text + " ".repeat(spare);
+  return problems;
 }

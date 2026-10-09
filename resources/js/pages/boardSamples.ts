@@ -28,6 +28,40 @@ export const SAMPLE_RECORDS: Row[] = [
 
 export const SAMPLES: Sample[] = [
   {
+    id: "mixed",
+    label: "Mixed cell types",
+    cellWidth: 24,
+    cellHeight: 38,
+    layout: {
+      columns: 38,
+      rows: 7,
+      pageSeconds: 8,
+      fields: [
+        { id: "title", area: "0,0 to 20,0", text: "DEPARTURES" },
+        {
+          id: "note",
+          area: "22,0 to 37,0",
+          align: "right",
+          text: "Live from the timetable",
+          cell: { type: "text", color: "#9aa3ad", fontSize: 18, fontFamily: '"Inter", sans-serif' },
+        },
+      ],
+      lists: [
+        {
+          id: "departures",
+          area: "0,1 to 37,6",
+          header: true,
+          columns: [
+            { title: "TIME", text: "{departs_at|HH:mm}", width: 5, cell: { type: "dotmatrix" } },
+            { title: "DESTINATION", text: "{destination}", width: 15 },
+            { title: "PLAT", text: "{platform}", width: 4, align: "right", cell: { type: "segment", segments: 7 } },
+            { title: "Calling at", text: "{calling_at}", cell: { type: "text", fontSize: 17, fontFamily: '"Inter", sans-serif' } },
+          ],
+        },
+      ],
+    },
+  },
+  {
     id: "table",
     label: "Departures table",
     cellWidth: 26,

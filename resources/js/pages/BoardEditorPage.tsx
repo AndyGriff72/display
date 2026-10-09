@@ -21,6 +21,7 @@ import { CHARSETS, type CharsetName } from "../cells/charsets";
 import { normalizeStack } from "../cells/splitflap/flapStack";
 import { FONTS, loadFont } from "../fonts";
 import { SAMPLE_RECORDS, SAMPLES, type LayoutShape } from "./boardSamples";
+import { AreasPanel } from "./AreasPanel";
 import { StaticAreasPanel } from "./StaticAreasPanel";
 
 const CELL_TYPE_LABELS: Record<CellType, string> = {
@@ -453,6 +454,14 @@ export default function BoardEditorPage() {
             })}
           </fieldset>
         )}
+
+        <AreasPanel
+          fields={shape.fields ?? []}
+          lists={shape.lists ?? []}
+          boardType={cellType}
+          cellHeight={cellHeight}
+          onChange={({ fields, lists }) => replaceShape({ ...shape, ...(shape.fields ? { fields } : {}), ...(shape.lists ? { lists } : {}) })}
+        />
 
         <StaticAreasPanel statics={shape.statics ?? []} onChange={(statics) => replaceShape({ ...shape, statics })} />
 
