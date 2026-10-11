@@ -5,77 +5,14 @@ import {
   type AreaCell,
   type AreaCellType,
   type CellType,
-  type FieldArea,
   type Finish,
-  type ListArea,
-} from "../board/layout";
-import { FONTS } from "../fonts";
-import { OptionalColour } from "./StaticAreasPanel";
-import { CELL_LOOKS, lookById, lookId, lookLabel } from "./cellLooks";
-
-/**
- * Each field and list column's cell style: the board's own cells, or a type and look of its
- * own. Cells keep the board's size whatever their type, so the grid holds together.
- */
-export function AreasPanel({
-  fields,
-  lists,
-  boardType,
-  boardFinish,
-  boardColour,
-  cellHeight,
-  onChange,
-}: {
-  fields: FieldArea[];
-  lists: ListArea[];
-  boardType: CellType;
-  boardFinish?: Finish;
-  /** The board's character colour, which areas using the board's cells start from. */
-  boardColour: string;
-  cellHeight: number;
-  onChange: (next: { fields: FieldArea[]; lists: ListArea[] }) => void;
-}) {
-  if (fields.length === 0 && lists.length === 0) return null;
-
-  const setField = (i: number, cell: AreaCell | undefined) =>
-    onChange({ fields: fields.map((f, j) => (j === i ? withCell(f, cell) : f)), lists });
-  const setColumn = (l: number, c: number, cell: AreaCell | undefined) =>
-    onChange({
-      fields,
-      lists: lists.map((list, j) => (j === l ? { ...list, columns: list.columns.map((col, k) => (k === c ? withCell(col, cell) : col)) } : list)),
-    });
-
-  return (
-    <fieldset className="wide areas-panel">
-      <legend>Areas</legend>
-      <p className="hint">
-        Each field and list column can use the board's cells or its own type. Text areas show ordinary text, which can hold
-        more characters than the area is wide.
-      </p>
-      {fields.map((f, i) => (
-        <div className="area-row" key={`f${i}`}>
-          <span className="area-name">
-            {f.id} <span className="hint">field · {f.area}</span>
-          </span>
-          <CellStyle cell={f.cell} boardType={boardType} boardFinish={boardFinish} boardColour={boardColour} cellHeight={cellHeight} onChange={(cell) => setField(i, cell)} />
-        </div>
-      ))}
-      {lists.map((list, l) =>
-        (Array.isArray(list.columns) ? list.columns : []).map((col, c) => (
-          <div className="area-row" key={`l${l}c${c}`}>
-            <span className="area-name">
-              {list.id} › {col.title || col.text || `column ${c + 1}`} <span className="hint">list column {c + 1}</span>
-            </span>
-            <CellStyle cell={col.cell} boardType={boardType} boardFinish={boardFinish} boardColour={boardColour} cellHeight={cellHeight} onChange={(cell) => setColumn(l, c, cell)} />
-          </div>
-        ))
-      )}
-    </fieldset>
-  );
-}
+} from "../../board/layout";
+import { FONTS } from "../../fonts";
+import { OptionalColour } from "../StaticAreasPanel";
+import { CELL_LOOKS, lookById, lookId, lookLabel } from "../cellLooks";
 
 /** Choose an area's cell type, then the settings that type has. */
-function CellStyle({
+export function CellStyle({
   cell,
   boardType,
   boardFinish,
@@ -208,7 +145,7 @@ function CellStyle({
   );
 }
 
-function withCell<T extends { cell?: AreaCell }>(area: T, cell: AreaCell | undefined): T {
+export function withCell<T extends { cell?: AreaCell }>(area: T, cell: AreaCell | undefined): T {
   const { cell: _old, ...rest } = area;
   return (cell ? { ...rest, cell } : rest) as T;
 }

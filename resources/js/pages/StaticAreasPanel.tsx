@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiError } from "../api/client";
 import { deleteImage, listImages, uploadImage, type UploadedImage } from "../api/images";
 import { DEFAULT_COLOURS, type StaticArea } from "../board/layout";
+import { PositionFields, formatArea } from "./editor/PositionFields";
 import { FONTS } from "../fonts";
 
 const FITS: { value: NonNullable<StaticArea["fit"]>; label: string }[] = [
@@ -17,17 +18,20 @@ const FITS: { value: NonNullable<StaticArea["fit"]>; label: string }[] = [
 export function StaticAreasPanel({
   statics,
   cellHeight,
+  columns,
+  rows,
   onChange,
 }: {
   statics: StaticArea[];
   /** The board's cell height, which text is sized from unless given a size. */
   cellHeight: number;
+  /** The board's size, which positions are kept within. */
+  columns: number;
+  rows: number;
   onChange: (statics: StaticArea[]) => void;
 }) {
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
-  const [newId, setNewId] = useState("");
-  const [newArea, setNewArea] = useState("");
 
   const refresh = () =>
     listImages()
@@ -67,18 +71,18 @@ export function StaticAreasPanel({
     refresh();
   };
 
+  // A new static area starts small at the top left, ready to be moved and filled.
   const add = () => {
-    const id = newId.trim();
-    if (!id || !newArea.trim()) return;
-    onChange([...statics, { id, area: newArea.trim() }]);
-    setNewId("");
-    setNewArea("");
+    const ids = new Set(statics.map((s) => s.id));
+    let n = 1;
+    while (ids.has(`static${n}`)) n++;
+    onChange([...statics, { id: `static${n}`, area: formatArea({ x1: 0, y1: 0, x2: Math.min(3, columns - 1), y2: Math.min(1, rows - 1) }) }]);
   };
 
   return (
     <fieldset className="wide static-panel">
       <legend>Static areas</legend>
-      {statics.length === 0 && <p className="hint">None yet. Add one below to show a logo or other image.</p>}
+      {statics.length === 0 && <p className="hint">None yet. Add one to show a logo, an image or fixed text.</p>}
 
       {statics.map((s, i) => (
         <div className="static-row" key={i}>
@@ -98,12 +102,12 @@ export function StaticAreasPanel({
           </div>
           <div className="static-controls">
             <div className="row-editor">
-              <input value={s.id} onChange={(e) => update(i, { id: e.target.value })} aria-label="Name" size={10} />
-              <input value={s.area} onChange={(e) => update(i, { area: e.target.value })} aria-label="Area" size={12} placeholder="0,0 to 3,3" />
+              <input className="area-id" value={s.id} onChange={(e) => update(i, { id: e.target.value })} aria-label="Name" size={10} />
               <button className="icon" title="Remove this static area" onClick={() => onChange(statics.filter((_, j) => j !== i))}>
                 ×
               </button>
             </div>
+            <PositionFields area={s.area} columns={columns} rows={rows} onChange={(area) => update(i, { area })} />
             <div className="row-editor">
               <label className="inline">
                 Shows
@@ -213,11 +217,7 @@ export function StaticAreasPanel({
       ))}
 
       <div className="row-editor">
-        <input value={newId} onChange={(e) => setNewId(e.target.value)} placeholder="Name, e.g. logo" size={14} />
-        <input value={newArea} onChange={(e) => setNewArea(e.target.value)} placeholder="Area, e.g. 0,0 to 3,3" size={18} />
-        <button onClick={add} disabled={!newId.trim() || !newArea.trim()}>
-          + Add a static area
-        </button>
+        <button onClick={add}>+ Add a static area</button>
       </div>
 
       {notice && <p className={`notice ${notice.kind}`}>{notice.text}</p>}

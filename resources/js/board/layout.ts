@@ -166,6 +166,12 @@ export interface ListColumn {
   title?: string;
   /** A template, as for fields: "{destination}", "{departs_at|HH:mm}", "PLAT {platform}". */
   text: string;
+  /**
+   * Where the column starts, counted in cells from its list's left edge (0 is the list's first
+   * column). Without one, it starts one cell after the column before. Space between columns is
+   * bare board, as on real displays with gaps between their columns of information.
+   */
+  x?: number;
   /** Characters. The last column may leave it out to take whatever width is left. */
   width?: number;
   align?: "left" | "right" | "center";
@@ -175,7 +181,8 @@ export interface ListColumn {
 
 /**
  * Records as rows: each board row in the area shows one record, laid out in columns, with an
- * optional header row of column titles first. Columns are separated by one blank cell.
+ * optional header row of column titles first. Columns are placed by their x, or one cell after
+ * the column before; the space between them is bare.
  */
 export interface ListArea {
   id: string;
@@ -373,6 +380,22 @@ export function validateLayout(layout: BoardLayout): string[] {
   return errors;
 }
 
+/**
+ * Where each column of a list sits, relative to the list's left edge: its own x, or one cell
+ * after the column before. A column without a width is one cell wide, unless it is the last,
+ * which runs to the list's right edge.
+ */
+export function columnOffsets(columns: ListColumn[], listWidth: number): { start: number; width: number }[] {
+  let next = 0;
+  return columns.map((c, i) => {
+    const start = Number.isInteger(c?.x) && (c.x as number) >= 0 ? (c.x as number) : next;
+    const given = Number.isInteger(c?.width) && (c.width as number) > 0 ? (c.width as number) : undefined;
+    const width = given ?? (i === columns.length - 1 ? Math.max(0, listWidth - start) : 1);
+    next = start + width + 1;
+    return { start, width };
+  });
+}
+
 function listProblems(list: ListArea, rect: Rect | null): string[] {
   const name = `List "${list.id}"`;
   if (!Array.isArray(list.columns) || list.columns.length === 0) {
@@ -384,6 +407,9 @@ function listProblems(list: ListArea, rect: Rect | null): string[] {
     const last = i === list.columns.length - 1;
     problems.push(...areaCellProblems(which, c?.cell));
     if (typeof c?.text !== "string") problems.push(`${which}: text must be written in quotes, e.g. "{destination}".`);
+    if (c?.x !== undefined && !(Number.isInteger(c.x) && c.x >= 0)) {
+      problems.push(`${which}: its start must be a whole number of cells from the list's left edge.`);
+    }
     if (c?.width === undefined) {
       if (!last) problems.push(`${which}: needs a width. Only the last column may take whatever is left.`);
     } else if (!(Number.isInteger(c.width) && c.width >= 1)) {
@@ -391,10 +417,18 @@ function listProblems(list: ListArea, rect: Rect | null): string[] {
     }
   });
   if (rect) {
-    const needed = list.columns.reduce((sum, c) => sum + (Number.isInteger(c?.width) ? (c.width as number) : 1), 0) + list.columns.length - 1;
-    if (needed > areaWidth(rect)) {
-      problems.push(`${name}: its columns need ${needed} characters, with a space between each, but it is ${areaWidth(rect)} wide.`);
-    }
+    const width = areaWidth(rect);
+    const spans = columnOffsets(list.columns, width);
+    spans.forEach((s, i) => {
+      if (s.width < 1 || s.start + s.width > width) {
+        problems.push(`${name}, column ${i + 1}: it runs past the list's right edge. The list is ${width} wide.`);
+      }
+      spans.slice(i + 1).forEach((t, k) => {
+        if (s.start < t.start + t.width && t.start < s.start + s.width) {
+          problems.push(`${name}: columns ${i + 1} and ${i + k + 2} overlap.`);
+        }
+      });
+    });
     if (list.header && areaHeight(rect) < 2) {
       problems.push(`${name}: with a header row it needs at least two rows, one for the header and one for a record.`);
     }

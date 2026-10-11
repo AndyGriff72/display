@@ -202,30 +202,31 @@ describe("lists", () => {
   const layout: BoardLayout = { columns: 16, rows: 3, cell, lists: [list] };
   const lines = (page = 0, records = departures) => {
     const cells = composeBoard(layout, {}, records, page);
-    return [0, 1, 2].map((y) => Array.from({ length: 16 }, (_, x) => cells.get(`${x},${y}`)).join(""));
+    // "·" marks a position with no cell: the bare space between columns.
+    return [0, 1, 2].map((y) => Array.from({ length: 16 }, (_, x) => cells.get(`${x},${y}`) ?? "·").join(""));
   };
 
   it("shows a header, then one record per row in columns, cutting text to its column", () => {
     // Widths 5 + 1 + 6 + 1, leaving 3 for the last column, which takes the rest.
     expect(lines()).toEqual([
-      "TIME  TO     PLA",
-      "14:32 LONDON   4",
-      "14:47 MANCHE  11",
+      "TIME ·TO    ·PLA",
+      "14:32·LONDON·  4",
+      "14:47·MANCHE· 11",
     ]);
   });
 
   it("pages through records that do not fit, looping back to the first page", () => {
-    expect(lines(1)[1]).toBe("15:05 EDINBU    ");
-    expect(lines(1)[2]).toBe("                ");
-    expect(lines(2)[1]).toBe("14:32 LONDON   4");
+    expect(lines(1)[1]).toBe("15:05·EDINBU·   ");
+    expect(lines(1)[2]).toBe("     ·      ·   ");
+    expect(lines(2)[1]).toBe("14:32·LONDON·  4");
   });
 
   it("stays on the first page when every record fits", () => {
-    expect(lines(1, departures.slice(0, 2))[1]).toBe("14:32 LONDON   4");
+    expect(lines(1, departures.slice(0, 2))[1]).toBe("14:32·LONDON·  4");
   });
 
   it("shows only the header when there is no data", () => {
-    expect(lines(0, [])).toEqual(["TIME  TO     PLA", " ".repeat(16), " ".repeat(16)]);
+    expect(lines(0, [])).toEqual(["TIME ·TO    ·PLA", "     ·      ·   ", "     ·      ·   "]);
   });
 
   it("colours the header row", () => {
@@ -240,12 +241,36 @@ describe("lists", () => {
     const base = { columns: 16, rows: 3, cell };
     expect(validateLayout({ ...base, lists: [list] })).toEqual([]);
     expect(validateLayout({ ...base, lists: [{ ...list, columns: [{ text: "{a}", width: 10 }, { text: "{b}", width: 10 }] }] })).toEqual([
-      'List "deps": its columns need 21 characters, with a space between each, but it is 16 wide.',
+      'List "deps", column 2: it runs past the list\'s right edge. The list is 16 wide.',
     ]);
     expect(validateLayout({ ...base, lists: [{ ...list, columns: [{ text: "{a}" }, { text: "{b}" }] }] })[0]).toContain(
       "needs a width"
     );
     expect(validateLayout({ ...base, lists: [{ ...list, area: "0,0 to 15,0" }] })[0]).toContain("at least two rows");
+  });
+
+  it("places a column at its own start, leaving the space before it bare", () => {
+    const spaced: BoardLayout = {
+      ...layout,
+      lists: [{ ...list, columns: [{ title: "TIME", text: "{t|HH:mm}", width: 5 }, { title: "PLAT", text: "{plat}", x: 12, width: 4, align: "right" }] }],
+    };
+    const cells = composeBoard(spaced, {}, departures, 0);
+    const row = (y: number) => Array.from({ length: 16 }, (_, x) => cells.get(`${x},${y}`) ?? "·").join("");
+    expect(row(0)).toBe("TIME ·······PLAT");
+    expect(row(1)).toBe("14:32·······   4");
+  });
+
+  it("fills the space between columns with blank cells when unused positions are blank", () => {
+    const cells = composeBoard({ ...layout, unusedCells: "blank" }, {}, departures, 0);
+    expect(cells.get("5,1")).toBe(" ");
+  });
+
+  it("reports columns that overlap or start in the wrong place", () => {
+    const base = { columns: 16, rows: 3, cell };
+    expect(
+      validateLayout({ ...base, lists: [{ ...list, columns: [{ text: "{a}", width: 6 }, { text: "{b}", x: 4, width: 3 }] }] })
+    ).toEqual(['List "deps": columns 1 and 2 overlap.']);
+    expect(validateLayout({ ...base, lists: [{ ...list, columns: [{ text: "{a}", x: -1, width: 3 }] }] })[0]).toContain("its start must be");
   });
 
   it("reports a list overlapping a field", () => {
@@ -294,9 +319,10 @@ describe("areas with their own cell type", () => {
   it("gives text areas no cells at all", () => {
     const specs = cellSpecs(mixed);
     for (let x = 0; x < 20; x++) expect(specs.has(`${x},2`)).toBe(false);
-    // The text column runs from 15 to 19; the gap before it takes the split-flap column's look.
+    // The text column runs from 15 to 19, and the gap before it, at 14, is bare.
     expect(specs.has("15,1")).toBe(false);
-    expect(specs.get("14,1")).toMatchObject({ type: "splitflap" });
+    expect(specs.has("14,1")).toBe(false);
+    expect(specs.get("13,1")).toMatchObject({ type: "splitflap" });
     expect(composeBoard(mixed, { title: "X" }).has("15,1")).toBe(false);
   });
 

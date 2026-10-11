@@ -11,6 +11,7 @@ import { pageOffset, renderTemplate, type Row } from "./binding";
 import {
   areaHeight,
   areaWidth,
+  columnOffsets,
   contains,
   DEFAULT_COLOURS,
   DEFAULT_HEADER_COLOR,
@@ -118,22 +119,15 @@ export function resolveStaticText(board: CellSettings, s: StaticArea): TextSpec 
   };
 }
 
-/** Which board columns each list column covers, inclusive. */
+/**
+ * Which board columns each list column covers, inclusive (see columnOffsets), cut to the list's
+ * right edge. A column that starts beyond the edge has x2 < x1: nothing to draw.
+ */
 export function columnSpans(columns: ListColumn[], rect: Rect): { x1: number; x2: number }[] {
-  const widths = columnWidths(columns, areaWidth(rect));
-  let x = rect.x1;
-  return widths.map((w) => {
-    const span = { x1: x, x2: Math.min(x + w - 1, rect.x2) };
-    x += w + 1;
-    return span;
-  });
-}
-
-/** Each column's width; a last column with none takes what is left of the list's width. */
-function columnWidths(columns: ListColumn[], width: number): number[] {
-  const fixed = columns.map((c) => (Number.isInteger(c.width) && (c.width as number) > 0 ? (c.width as number) : 0));
-  const used = fixed.reduce((a, b) => a + b, 0) + columns.length - 1;
-  return fixed.map((w, i) => (w === 0 ? Math.max(0, i === columns.length - 1 ? width - used : 1) : w));
+  return columnOffsets(columns, areaWidth(rect)).map(({ start, width }) => ({
+    x1: rect.x1 + start,
+    x2: Math.min(rect.x1 + start + width - 1, rect.x2),
+  }));
 }
 
 const key = (x: number, y: number) => `${x},${y}`;
@@ -141,10 +135,9 @@ const key = (x: number, y: number) => `${x},${y}`;
 /**
  * Which positions have a character cell, and how each looks.
  *
- * Fields and lists have cells (text areas excepted); the rest of the board is bare unless the
- * layout's unusedCells is "blank". The gap between two list columns takes the look of a column
- * beside it that has cells, and is bare between two text columns. A list's header row is drawn
- * in its header colour.
+ * Fields and list columns have cells (text areas excepted); the rest of the board, including the
+ * space between a list's columns, is bare unless the layout's unusedCells is "blank". A list's
+ * header row is drawn in its header colour.
  */
 export function cellSpecs(layout: BoardLayout): Map<string, CellSpec> {
   const statics = (layout.statics ?? []).map((s) => parseArea(s.area)).filter((r): r is Rect => !!r);
@@ -173,21 +166,15 @@ export function cellSpecs(layout: BoardLayout): Map<string, CellSpec> {
     const rect = parseArea(list.area ?? "");
     if (!rect || !Array.isArray(list.columns) || list.columns.length === 0) continue;
     const spans = columnSpans(list.columns, rect);
-    const looks = list.columns.map((c) => resolveCell(layout.cell, c?.cell));
-    // Every position in the list: its column's look, or for a gap, a neighbouring column's.
-    const lookAt = (x: number): CellSpec | null => {
-      const inside = spans.findIndex((s) => x >= s.x1 && x <= s.x2);
-      if (inside >= 0) return looks[inside];
-      const before = spans.reduce((last, s, i) => (s.x2 < x ? i : last), -1);
-      return (before >= 0 ? looks[before] : null) ?? looks[before + 1] ?? null;
-    };
     const headerColour = list.headerColor ?? DEFAULT_HEADER_COLOR;
-    for (let y = rect.y1; y <= rect.y2; y++) {
-      for (let x = rect.x1; x <= rect.x2; x++) {
-        const look = lookAt(x);
-        put(x, y, look && list.header && y === rect.y1 ? { ...look, color: headerColour } : look);
+    list.columns.forEach((column, i) => {
+      const look = resolveCell(layout.cell, column?.cell);
+      for (let y = rect.y1; y <= rect.y2; y++) {
+        for (let x = spans[i].x1; x <= spans[i].x2; x++) {
+          put(x, y, look && list.header && y === rect.y1 ? { ...look, color: headerColour } : look);
+        }
       }
-    }
+    });
   }
 
   return specs;
@@ -253,9 +240,18 @@ function pageOfRecords(list: ListArea, rect: Rect, records: Row[], page: number)
  */
 export function listLines(list: ListArea, rect: Rect, records: Row[], page: number): string[] {
   const width = areaWidth(rect);
-  const widths = columnWidths(list.columns, width);
-  const line = (texts: string[]) =>
-    alignLine(texts.map((t, i) => alignLine(t, widths[i], list.columns[i].align ?? "left")).join(" "), width, "left");
+  const spans = columnSpans(list.columns, rect);
+  // Each column's text, aligned within its own span; everything else in the row is a space.
+  const line = (texts: string[]) => {
+    const chars = Array<string>(width).fill(" ");
+    spans.forEach((s, i) => {
+      const w = s.x2 - s.x1 + 1;
+      if (w <= 0) return;
+      const text = alignLine(texts[i], w, list.columns[i].align ?? "left");
+      for (let k = 0; k < w; k++) chars[s.x1 - rect.x1 + k] = text[k];
+    });
+    return chars.join("");
+  };
 
   const lines: string[] = [];
   if (list.header) lines.push(line(list.columns.map((c) => c.title ?? "")));

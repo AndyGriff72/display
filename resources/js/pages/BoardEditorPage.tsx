@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { deleteBoard, getBoard, listBoards, saveBoard, type BoardSummary } from "../api/boards";
 import { apiError } from "../api/client";
@@ -8,7 +8,6 @@ import { bindFields, templateColumns, type Row } from "../board/binding";
 import { Board } from "../board/Board";
 import {
   DEFAULT_PAGE_SECONDS,
-  parseArea,
   DEFAULT_LINE_HEIGHT,
   FINISH_COLOURS,
   validateLayout,
@@ -22,9 +21,9 @@ import { CHARSETS, type CharsetName } from "../cells/charsets";
 import { normalizeStack } from "../cells/splitflap/flapStack";
 import { FONTS, loadFont } from "../fonts";
 import { SAMPLE_RECORDS, SAMPLES, type LayoutShape } from "./boardSamples";
-import { AreasPanel } from "./AreasPanel";
 import { OptionalColour, StaticAreasPanel } from "./StaticAreasPanel";
 import { CELL_LOOKS, lookById, lookId } from "./cellLooks";
+import { AreasEditor } from "./editor/AreasEditor";
 
 /** Each cell type starts in the colour it is best known in. */
 const DEFAULT_COLOURS: Record<CellType, string> = {
@@ -45,7 +44,16 @@ const COLOUR_PRESETS = [
 
 /** Where the board's records come from, besides a saved data source. */
 const BUILT_IN = "__sample__";
-const TYPED = "__typed__";
+const NO_DATA = "__none__";
+
+/** The drawer's tabs: the board as a whole, its areas, its static areas, and the raw layout. */
+const TABS = [
+  { id: "board", label: "Board" },
+  { id: "areas", label: "Areas" },
+  { id: "statics", label: "Static areas" },
+  { id: "advanced", label: "Advanced" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
 
 const playFlap = () => flapSound.play();
 const playDotFlips = (delaysMs: number[]) => flapSound.dotFlips(delaysMs);
@@ -71,11 +79,12 @@ export default function BoardEditorPage() {
   const [layoutText, setLayoutText] = useState(() => JSON.stringify(SAMPLES[0].layout, null, 2));
   const [shape, setShape] = useState<LayoutShape>(SAMPLES[0].layout);
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [values, setValues] = useState<Record<string, string>>({});
   const [showAreas, setShowAreas] = useState(false);
+  const [tab, setTab] = useState<Tab>("board");
+  const [drawerOpen, setDrawerOpen] = useState(true);
   const [dataSources, setDataSources] = useState<SavedDataSource[]>([]);
-  // The built-in sample records, typed text, or (when the layout names one) a saved data source.
-  const [feed, setFeed] = useState<typeof BUILT_IN | typeof TYPED>(BUILT_IN);
+  // The built-in sample records, no data, or (when the layout names one) a saved data source.
+  const [feed, setFeed] = useState<typeof BUILT_IN | typeof NO_DATA>(BUILT_IN);
 
   const [cellType, setCellType] = useState<CellType>("splitflap");
   const [colour, setColour] = useState(DEFAULT_COLOURS.splitflap);
@@ -109,21 +118,18 @@ export default function BoardEditorPage() {
   const data = useBoardData(shape.dataSource);
   const source = dataSources.find((s) => s.uuid === shape.dataSource);
   const records: Row[] = shape.dataSource ? data.rows : feed === BUILT_IN ? SAMPLE_RECORDS : [];
-  const usingData = !!shape.dataSource || feed === BUILT_IN;
   const fields = shape.fields ?? [];
-  // A field with text always shows it: its columns filled from the records when there are
-  // any, and any fixed text as it is. Only fields without text show what is typed below.
   const bound = (f: { text?: unknown }) => typeof f.text === "string";
 
   // Move on a page every pageSeconds. Lists only move when they have more records than rows.
   const pageSeconds = typeof shape.pageSeconds === "number" ? shape.pageSeconds : DEFAULT_PAGE_SECONDS;
   const page = usePaging(shape.pageSeconds, (shape.dataSource ?? "") + "|" + feed);
 
-  // Bound fields take their text from the records; the rest keep what was typed.
+  // Each field's text: fixed words as they are, columns in braces filled from the records.
   const boardValues = useMemo(
-    () => ({ ...values, ...bindFields(fields.filter(bound), records, shape.pageFields ? page : undefined) }),
+    () => bindFields(fields.filter(bound), records, shape.pageFields ? page : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [shape, values, records, page]
+    [shape, records, page]
   );
 
   // Columns the templates use that the data does not have: almost always a typing mistake.
@@ -146,7 +152,7 @@ export default function BoardEditorPage() {
 
   const chooseFeed = (value: string) => {
     const { dataSource: _old, ...rest } = shape;
-    if (value === BUILT_IN || value === TYPED) {
+    if (value === BUILT_IN || value === NO_DATA) {
       setFeed(value);
       replaceShape(rest);
     } else {
@@ -360,278 +366,340 @@ export default function BoardEditorPage() {
   useEffect(() => () => flapSound.disable(), []);
   useEffect(() => flapSound.setStyle(soundStyle), [soundStyle]);
 
+  const setShapeKey = <K extends keyof LayoutShape>(key: K, value: LayoutShape[K] | undefined) => {
+    const { [key]: _old, ...rest } = shape;
+    replaceShape((value === undefined ? rest : { ...rest, [key]: value }) as unknown as LayoutShape);
+  };
+  const problems = [...(jsonError ? [`The layout is not valid JSON: ${jsonError}`] : []), ...layoutErrors];
+
   return (
-    <main className="app">
-      <div className="board-bar">
-        <select value={boardId ?? ""} onChange={(e) => openBoard(e.target.value)} aria-label="Open a board">
-          <option value="">New board</option>
-          {boards.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Board name" aria-label="Board name" />
-        <button className="primary" onClick={() => save(false)}>
-          Save
-        </button>
-        <button onClick={() => save(true)}>Save as new…</button>
-        {boardId !== undefined && (
-          <button className="danger" onClick={remove}>
-            Delete
+    <main className={`editor${drawerOpen ? " with-drawer" : ""}`}>
+      <section className="editor-main">
+        <div className="board-bar">
+          <select value={boardId ?? ""} onChange={(e) => openBoard(e.target.value)} aria-label="Open a board">
+            <option value="">New board</option>
+            {boards.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Board name" aria-label="Board name" />
+          <button className="primary" onClick={() => save(false)}>
+            Save
           </button>
-        )}
-        <span className="hint">{savedSnapshot === null ? "Not saved yet" : dirty ? "Unsaved changes" : "Saved"}</span>
-        {screenKey && (
-          <a className="screen-link" href={"/screen/" + screenKey} target="_blank" rel="noreferrer" title="Screens show the board as last saved">
-            Open as a screen ↗
-          </a>
-        )}
-      </div>
-      {boardNotice && <p className={"notice board-notice " + boardNotice.kind}>{boardNotice.text}</p>}
+          <button onClick={() => save(true)}>Save as new…</button>
+          {boardId !== undefined && (
+            <button className="danger" onClick={remove}>
+              Delete
+            </button>
+          )}
+          <span className="hint">{savedSnapshot === null ? "Not saved yet" : dirty ? "Unsaved changes" : "Saved"}</span>
+          {screenKey && (
+            <a className="screen-link" href={"/screen/" + screenKey} target="_blank" rel="noreferrer" title="Screens show the board as last saved">
+              Open as a screen ↗
+            </a>
+          )}
+          {!drawerOpen && (
+            <button className="drawer-show" onClick={() => setDrawerOpen(true)}>
+              Settings ‹
+            </button>
+          )}
+        </div>
+        {boardNotice && <p className={"notice " + boardNotice.kind}>{boardNotice.text}</p>}
 
-      <div className="board-wrap">
-        <Board layout={layout} values={boardValues} records={records} page={page} onFlap={playFlap} onDotFlips={playDotFlips} showAreas={showAreas} />
-      </div>
+        <FitToWidth>
+          <Board layout={layout} values={boardValues} records={records} page={page} onFlap={playFlap} onDotFlips={playDotFlips} showAreas={showAreas} />
+        </FitToWidth>
 
-      <section className="controls">
-        <label>
-          Start from a sample
-          <select value="" onChange={(e) => loadSample(e.target.value)}>
-            <option value="">Choose…</option>
-            {SAMPLES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Data
-          <select value={shape.dataSource ?? feed} onChange={(e) => chooseFeed(e.target.value)}>
-            <option value={BUILT_IN}>Built-in sample departures</option>
-            <option value={TYPED}>None: show the text typed below</option>
-            {dataSources.map((s) => (
-              <option key={s.uuid} value={s.uuid}>
-                {s.name}
-              </option>
-            ))}
-            {shape.dataSource && !source && <option value={shape.dataSource}>Unknown data source</option>}
-          </select>
-        </label>
-        {shape.dataSource && <DataStatus data={data} name={source?.name} missing={missingColumns} />}
-        {usingData && (
-          <p className="hint wide">
-            {pageSeconds > 0
-              ? `Pages of records change every ${pageSeconds} seconds${shape.pageFields ? ", for fields as well as lists" : ""}.`
-              : "Paging is off: the first page of records stays up."}
-          </p>
-        )}
-
-        <div className="buttons wide">
-          <Switch checked={soundOn} onChange={setSoundOn} label="Flap sound" />
-          <select value={soundStyle} onChange={(e) => setSoundStyle(e.target.value as SoundStyle)} aria-label="Sound style">
-            {SOUND_STYLES.map((s) => (
-              <option key={s} value={s}>
-                {SOUND_STYLE_LABELS[s]}
-              </option>
-            ))}
-          </select>
-          <button onClick={() => flapSound.audition()}>Hear it</button>
-
+        <div className="preview-tools">
           <label className="check">
             <input type="checkbox" checked={showAreas} onChange={(e) => setShowAreas(e.target.checked)} />
             Outline areas
           </label>
-          <label className="check" title="Positions outside every field, list and static area">
-            <input
-              type="checkbox"
-              checked={shape.unusedCells === "blank"}
-              onChange={(e) => {
-                const { unusedCells: _old, ...rest } = shape;
-                replaceShape(e.target.checked ? { ...rest, unusedCells: "blank" } : rest);
-              }}
-            />
-            Blank cells in unused positions
-          </label>
         </div>
-        {soundHeldBack && (
-          <p className="hint wide sound-held">
-            Your browser is holding the sound back until you click or press a key on this page. Screens do the same unless sound is
-            allowed for this site.
-          </p>
-        )}
-
-        {fields.length > 0 && (
-          <fieldset className="wide">
-            <legend>Fields</legend>
-            {fields.some((f) => !bound(f)) && (
-              <p className="hint wide">
-                Text typed into these boxes is for trying the board out and is not saved. For text that is saved, give the
-                field a "text" in the layout: fixed words, or columns from the data in braces.
-              </p>
-            )}
-            {fields.map((f) => {
-              const rect = parseArea(f.area ?? "");
-              const multiRow = !!rect && rect.y2 > rect.y1;
-              const set = (v: string) => setValues((old) => ({ ...old, [f.id]: v }));
-              if (bound(f)) {
-                return (
-                  <div key={f.id} className="bound-field">
-                    <span>
-                      {f.id} <span className="hint">{f.area}</span>
-                    </span>
-                    <code>{f.text}</code>
-                    <span className="hint">shows: {boardValues[f.id] ? `"${boardValues[f.id]}"` : "nothing"}</span>
-                  </div>
-                );
-              }
-              return (
-                <label key={f.id}>
-                  <span>
-                    {f.id} <span className="hint">{f.area}</span>
-                  </span>
-                  {multiRow ? (
-                    <textarea rows={2} value={values[f.id] ?? ""} onChange={(e) => set(e.target.value)} />
-                  ) : (
-                    <input value={values[f.id] ?? ""} onChange={(e) => set(e.target.value)} />
-                  )}
-                </label>
-              );
-            })}
-          </fieldset>
-        )}
-
-        <AreasPanel
-          fields={shape.fields ?? []}
-          lists={shape.lists ?? []}
-          boardType={cellType}
-          boardFinish={finish}
-          boardColour={colour}
-          cellHeight={cellHeight}
-          onChange={({ fields, lists }) => replaceShape({ ...shape, ...(shape.fields ? { fields } : {}), ...(shape.lists ? { lists } : {}) })}
-        />
-
-        <StaticAreasPanel statics={shape.statics ?? []} cellHeight={cellHeight} onChange={(statics) => replaceShape({ ...shape, statics })} />
-
-        <label className="wide">
-          Layout (JSON). Areas are inclusive "column,row to column,row", counting from 0,0 at the top left.
-          <textarea className="code" rows={16} value={layoutText} onChange={(e) => editLayout(e.target.value)} />
-        </label>
-        {(jsonError || layoutErrors.length > 0) && (
-          <ul className="errors wide">
-            {jsonError && <li>Not valid JSON: {jsonError}</li>}
-            {layoutErrors.map((e) => (
+        {problems.length > 0 && (
+          <ul className="errors">
+            {problems.map((e) => (
               <li key={e}>{e}</li>
             ))}
           </ul>
         )}
-
-        <label>
-          Cell type
-          <select value={lookId(cellType, finish)} onChange={(e) => changeLook(e.target.value)}>
-            {CELL_LOOKS.map((look) => (
-              <option key={look.id} value={look.id}>
-                {look.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Colour
-          <span className="colours">
-            <input type="color" value={colour} onChange={(e) => setColour(e.target.value)} />
-            {COLOUR_PRESETS.map((p) => (
-              <button
-                key={p.value}
-                className="swatch"
-                title={p.label}
-                aria-label={p.label}
-                style={{ background: p.value }}
-                onClick={() => setColour(p.value)}
-              />
-            ))}
-          </span>
-        </label>
-        {cellType === "segment" && (
-          <label>
-            Segments
-            <select value={segments} onChange={(e) => setSegments(Number(e.target.value) as 7 | 14)}>
-              <option value={14}>14 (letters and digits)</option>
-              <option value={7}>7 (digits)</option>
-            </select>
-          </label>
-        )}
-        {cellType === "text" && (
-          <>
-            <label>
-              Typeface
-              <select value={fontId} onChange={(e) => setFontId(e.target.value)}>
-                {FONTS.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Slider
-              label="Text size"
-              unit="px"
-              value={textSize ?? Math.round(cellHeight * 0.6)}
-              min={6}
-              max={200}
-              onChange={setTextSize}
-            />
-            <label>
-              Background
-              <span className="colours">
-                <OptionalColour label="Behind the text" value={textBackground} fallback="#1b1b1d" onChange={setTextBackground} />
-              </span>
-            </label>
-            <Slider label="Letter spacing" unit="px" value={letterSpacing ?? 0} min={-4} max={30} onChange={setLetterSpacing} />
-            <Slider
-              label="Line spacing"
-              unit="×"
-              value={lineHeight ?? DEFAULT_LINE_HEIGHT}
-              min={0.8}
-              max={3}
-              step={0.05}
-              onChange={setLineHeight}
-            />
-          </>
-        )}
-        {cellType === "splitflap" && (
-          <>
-            <label>
-              Typeface
-              <select value={fontId} onChange={(e) => setFontId(e.target.value)}>
-                {FONTS.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Flap stack
-              <select value={stackName} onChange={(e) => setStackName(e.target.value as CharsetName)}>
-                {Object.keys(CHARSETS).map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Slider label="Flip time" unit="ms" value={flipMs} min={30} max={400} step={10} onChange={setFlipMs} />
-          </>
-        )}
-        <Slider label="Cell width" unit="px" value={cellWidth} min={16} max={120} onChange={setCellWidth} />
-        <Slider label="Cell height" unit="px" value={cellHeight} min={24} max={180} onChange={setCellHeight} />
-        <Slider label="Gap across" unit="px" value={gapX ?? Math.round(cellWidth * 0.08)} min={0} max={40} onChange={setGapX} />
-        <Slider label="Gap down" unit="px" value={gapY ?? Math.round(cellHeight * 0.12)} min={0} max={40} onChange={setGapY} />
-        <Slider label="Volume" value={Math.round(volume * 100)} unit="%" min={0} max={100} onChange={(v) => setVolume(v / 100)} />
       </section>
+
+      {drawerOpen && (
+        <aside className="drawer" aria-label="Board settings">
+          <div className="drawer-head">
+            <div className="tabs" role="tablist">
+              {TABS.map((t) => (
+                <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <button className="icon" title="Hide the settings" onClick={() => setDrawerOpen(false)}>
+              »
+            </button>
+          </div>
+
+          <div className="drawer-body controls">
+            {tab === "board" && (
+              <>
+                <fieldset>
+                  <legend>Start</legend>
+                  <label>
+                    Start from a sample
+                    <select value="" onChange={(e) => loadSample(e.target.value)}>
+                      <option value="">Choose…</option>
+                      {SAMPLES.map((sm) => (
+                        <option key={sm.id} value={sm.id}>
+                          {sm.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </fieldset>
+
+                <fieldset>
+                  <legend>Size</legend>
+                  <div className="row-editor">
+                    <label className="inline">
+                      Columns
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={shape.columns}
+                        onChange={(e) => e.target.value !== "" && setShapeKey("columns", Math.max(1, Number(e.target.value)))}
+                        style={{ width: 70 }}
+                      />
+                    </label>
+                    <label className="inline">
+                      Rows
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={shape.rows}
+                        onChange={(e) => e.target.value !== "" && setShapeKey("rows", Math.max(1, Number(e.target.value)))}
+                        style={{ width: 70 }}
+                      />
+                    </label>
+                  </div>
+                  <Slider label="Cell width" unit="px" value={cellWidth} min={16} max={120} onChange={setCellWidth} />
+                  <Slider label="Cell height" unit="px" value={cellHeight} min={24} max={180} onChange={setCellHeight} />
+                  <Slider label="Gap across" unit="px" value={gapX ?? Math.round(cellWidth * 0.08)} min={0} max={40} onChange={setGapX} />
+                  <Slider label="Gap down" unit="px" value={gapY ?? Math.round(cellHeight * 0.12)} min={0} max={40} onChange={setGapY} />
+                </fieldset>
+
+                <fieldset>
+                  <legend>Cells</legend>
+                  <label>
+                    Cell type
+                    <select value={lookId(cellType, finish)} onChange={(e) => changeLook(e.target.value)}>
+                      {CELL_LOOKS.map((look) => (
+                        <option key={look.id} value={look.id}>
+                          {look.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Colour
+                    <span className="colours">
+                      <input type="color" value={colour} onChange={(e) => setColour(e.target.value)} />
+                      {COLOUR_PRESETS.map((pr) => (
+                        <button
+                          key={pr.value}
+                          className="swatch"
+                          title={pr.label}
+                          aria-label={pr.label}
+                          style={{ background: pr.value }}
+                          onClick={() => setColour(pr.value)}
+                        />
+                      ))}
+                    </span>
+                  </label>
+                  {cellType === "segment" && (
+                    <label>
+                      Segments
+                      <select value={segments} onChange={(e) => setSegments(Number(e.target.value) as 7 | 14)}>
+                        <option value={14}>14 (letters and digits)</option>
+                        <option value={7}>7 (digits)</option>
+                      </select>
+                    </label>
+                  )}
+                  {(cellType === "splitflap" || cellType === "text") && (
+                    <label>
+                      Typeface
+                      <select value={fontId} onChange={(e) => setFontId(e.target.value)}>
+                        {FONTS.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {cellType === "text" && (
+                    <>
+                      <Slider label="Text size" unit="px" value={textSize ?? Math.round(cellHeight * 0.6)} min={6} max={200} onChange={setTextSize} />
+                      <OptionalColour label="Background behind the text" value={textBackground} fallback="#1b1b1d" onChange={setTextBackground} />
+                      <Slider label="Letter spacing" unit="px" value={letterSpacing ?? 0} min={-4} max={30} onChange={setLetterSpacing} />
+                      <Slider label="Line spacing" unit="×" value={lineHeight ?? DEFAULT_LINE_HEIGHT} min={0.8} max={3} step={0.05} onChange={setLineHeight} />
+                    </>
+                  )}
+                  {cellType === "splitflap" && (
+                    <>
+                      <label>
+                        Flap stack
+                        <select value={stackName} onChange={(e) => setStackName(e.target.value as CharsetName)}>
+                          {Object.keys(CHARSETS).map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <Slider label="Flip time" unit="ms" value={flipMs} min={30} max={400} step={10} onChange={setFlipMs} />
+                    </>
+                  )}
+                  <label className="check" title="Positions outside every field, list and static area, including gaps between list columns">
+                    <input type="checkbox" checked={shape.unusedCells === "blank"} onChange={(e) => setShapeKey("unusedCells", e.target.checked ? "blank" : undefined)} />
+                    Blank cells in unused positions
+                  </label>
+                </fieldset>
+
+                <fieldset>
+                  <legend>Data</legend>
+                  <label>
+                    Data
+                    <select value={shape.dataSource ?? feed} onChange={(e) => chooseFeed(e.target.value)}>
+                      <option value={BUILT_IN}>Built-in sample departures</option>
+                      <option value={NO_DATA}>No data</option>
+                      {dataSources.map((ds) => (
+                        <option key={ds.uuid} value={ds.uuid}>
+                          {ds.name}
+                        </option>
+                      ))}
+                      {shape.dataSource && !source && <option value={shape.dataSource}>Unknown data source</option>}
+                    </select>
+                  </label>
+                  {shape.dataSource && <DataStatus data={data} name={source?.name} missing={missingColumns} />}
+                  <label className="inline" title="When there are more records than fit, show the next lot after this long. 0 keeps the first lot up.">
+                    Next page of records every
+                    <input
+                      type="number"
+                      min={0}
+                      max={3600}
+                      value={pageSeconds}
+                      onChange={(e) => e.target.value !== "" && setShapeKey("pageSeconds", Math.max(0, Number(e.target.value)))}
+                      style={{ width: 64 }}
+                    />
+                    seconds
+                  </label>
+                  <label className="check">
+                    <input type="checkbox" checked={!!shape.pageFields} onChange={(e) => setShapeKey("pageFields", e.target.checked || undefined)} />
+                    Page fields too (one record per page)
+                  </label>
+                </fieldset>
+
+                <fieldset>
+                  <legend>Sound</legend>
+                  <div className="buttons">
+                    <Switch checked={soundOn} onChange={setSoundOn} label="Flap sound" />
+                    <select value={soundStyle} onChange={(e) => setSoundStyle(e.target.value as SoundStyle)} aria-label="Sound style">
+                      {SOUND_STYLES.map((st) => (
+                        <option key={st} value={st}>
+                          {SOUND_STYLE_LABELS[st]}
+                        </option>
+                      ))}
+                    </select>
+                    <button onClick={() => flapSound.audition()}>Hear it</button>
+                  </div>
+                  <Slider label="Volume" value={Math.round(volume * 100)} unit="%" min={0} max={100} onChange={(v) => setVolume(v / 100)} />
+                  {soundHeldBack && (
+                    <p className="hint sound-held">
+                      Your browser is holding the sound back until you click or press a key on this page. Screens do the same unless sound
+                      is allowed for this site.
+                    </p>
+                  )}
+                </fieldset>
+              </>
+            )}
+
+            {tab === "areas" && (
+              <AreasEditor
+                fields={shape.fields ?? []}
+                lists={shape.lists ?? []}
+                columns={shape.columns}
+                rows={shape.rows}
+                boardType={cellType}
+                boardFinish={finish}
+                boardColour={colour}
+                cellHeight={cellHeight}
+                dataColumns={shape.dataSource ? data.columns : feed === BUILT_IN ? Object.keys(SAMPLE_RECORDS[0] ?? {}) : []}
+                showing={boardValues}
+                onChange={({ fields: f, lists: l }) => replaceShape({ ...shape, fields: f, lists: l })}
+              />
+            )}
+
+            {tab === "statics" && (
+              <StaticAreasPanel
+                statics={shape.statics ?? []}
+                cellHeight={cellHeight}
+                columns={shape.columns}
+                rows={shape.rows}
+                onChange={(statics) => replaceShape({ ...shape, statics })}
+              />
+            )}
+
+            {tab === "advanced" && (
+              <label>
+                <span>
+                  The board's definition, for editing by hand. Areas are "column,row to column,row", counting from 0,0 at the top left.
+                  The board's appearance (cell type, colours, sizes) is set on the Board tab.
+                </span>
+                <textarea className="code" rows={28} value={layoutText} onChange={(e) => editLayout(e.target.value)} spellCheck={false} />
+              </label>
+            )}
+          </div>
+        </aside>
+      )}
     </main>
+  );
+}
+
+/**
+ * The board, scaled down (never up) to the width available beside the drawer, so the whole of
+ * it stays in view while it is being edited.
+ */
+function FitToWidth({ children }: { children: ReactNode }) {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState({ scale: 1, height: 0, left: 0 });
+
+  useLayoutEffect(() => {
+    const o = outer.current;
+    const i = inner.current;
+    if (!o || !i) return;
+    const measure = () => {
+      const scale = Math.min(1, o.clientWidth / Math.max(1, i.offsetWidth));
+      setFit({ scale, height: i.offsetHeight * scale, left: Math.max(0, (o.clientWidth - i.offsetWidth * scale) / 2) });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(o);
+    observer.observe(i);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={outer} className="fit-preview" style={{ height: fit.height || undefined }}>
+      <div ref={inner} className="fit-preview-inner" style={{ transform: `scale(${fit.scale})`, left: fit.left }}>
+        {children}
+      </div>
+    </div>
   );
 }
 
