@@ -420,6 +420,9 @@ describe("static text", () => {
       fontSize: 30,
       letterSpacing: 0,
       lineHeight: 1.15,
+      bold: false,
+      italic: false,
+      underline: false,
     });
     expect(resolveStaticText(board, { id: "s", area: "0,0", text: "WELCOME", color: "#000", fontFamily: '"Inter", sans-serif', fontSize: 20 })).toEqual({
       color: "#000",
@@ -427,6 +430,9 @@ describe("static text", () => {
       fontSize: 20,
       letterSpacing: 0,
       lineHeight: 1.15,
+      bold: false,
+      italic: false,
+      underline: false,
     });
   });
 
@@ -439,6 +445,34 @@ describe("static text", () => {
     expect(
       validateLayout({ columns: 4, rows: 1, cell: board, statics: [{ id: "s", area: "0,0", text: 5 as unknown as string, fontSize: 2 }] })
     ).toEqual(['Static area "s": text must be written in quotes.', 'Static area "s": fontSize must be a number of pixels, from 4 to 400.']);
+  });
+});
+
+describe("bold, italic and underline", () => {
+  const plain = { type: "splitflap", width: 30, height: 50 } as const;
+  const textBoard = { type: "text", width: 30, height: 50, bold: true, underline: true } as const;
+  const field = (cell?: object) => ({ columns: 10, rows: 1, cell: textBoard, fields: [{ id: "f", area: "0,0 to 9,0", text: "HI", ...(cell ? { cell } : {}) }] });
+
+  it("draws static text in the styles it is given", () => {
+    expect(resolveStaticText(plain, { id: "s", area: "0,0", text: "HI", italic: true })).toMatchObject({ bold: false, italic: true, underline: false });
+  });
+
+  it("gives a text board's styles to its text areas, unless an area says otherwise", () => {
+    expect(textBlocks(field(), {})[0].style).toMatchObject({ bold: true, italic: false, underline: true });
+    expect(textBlocks(field({ bold: false, italic: true }), {})[0].style).toMatchObject({ bold: false, italic: true, underline: true });
+  });
+
+  it("does not give another kind of board's styles to text areas on it", () => {
+    const board = { ...plain, bold: true };
+    const blocks = textBlocks({ columns: 10, rows: 1, cell: board, fields: [{ id: "f", area: "0,0 to 9,0", text: "HI", cell: { type: "text" } }] }, {});
+    expect(blocks[0].style.bold).toBe(false);
+  });
+
+  it("reports a style that is not true or false", () => {
+    expect(validateLayout(field({ bold: "yes" }))).toEqual(['Field "f": bold must be true or false, without quotes.']);
+    expect(validateLayout({ columns: 4, rows: 1, cell: plain, statics: [{ id: "s", area: "0,0", text: "HI", underline: 1 as unknown as boolean }] })).toEqual([
+      'Static area "s": underline must be true or false, without quotes.',
+    ]);
   });
 });
 

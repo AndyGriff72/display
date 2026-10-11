@@ -49,7 +49,16 @@ export const DEFAULT_LINE_HEIGHT = 1.15;
  * Anything left out comes from the board, apart from colour, which for a different type than the
  * board's comes from DEFAULT_COLOURS.
  */
-export interface AreaCell {
+/** Text drawn bold, italic or underlined. Unset means not, or what the area inherits. */
+export interface TextStyle {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+}
+
+export const TEXT_STYLES = ["bold", "italic", "underline"] as const;
+
+export interface AreaCell extends TextStyle {
   type?: AreaCellType;
   /** Character colour (text colour, for text). Any CSS colour. */
   color?: string;
@@ -78,7 +87,7 @@ export interface AreaCell {
 }
 
 /** How every cell on the board looks. Settings that do not apply to the cell type are ignored. */
-export interface CellSettings {
+export interface CellSettings extends TextStyle {
   type: CellType;
   /** Cell size in pixels. */
   width: number;
@@ -109,7 +118,7 @@ export interface CellSettings {
 }
 
 /** A fixed part of the board, with no character cells: a logo or other image, or fixed text. */
-export interface StaticArea {
+export interface StaticArea extends TextStyle {
   id: string;
   area: string;
   /** A logo or other picture: any URL an <img> can load, including a data: URL. */
@@ -297,6 +306,7 @@ export function validateLayout(layout: BoardLayout): string[] {
     errors.push("Segments must be 7 or 14.");
   }
   errors.push(...finishProblems("The board's cells", cell?.finish, cell?.type));
+  errors.push(...textStyleProblems("The board's cells", cell ?? {}));
 
   if (layout.pageSeconds !== undefined && !(typeof layout.pageSeconds === "number" && layout.pageSeconds >= 0)) {
     errors.push("pageSeconds must be a number of seconds, or 0 to stay on the first page.");
@@ -342,6 +352,7 @@ export function validateLayout(layout: BoardLayout): string[] {
     if (s.fontSize !== undefined && !(typeof s.fontSize === "number" && s.fontSize >= 4 && s.fontSize <= 400)) {
       errors.push(`Static area "${s.id}": fontSize must be a number of pixels, from 4 to 400.`);
     }
+    errors.push(...textStyleProblems(`Static area "${s.id}"`, s));
   }
   for (const f of layout.fields ?? []) {
     const rect = check("Field", f.id, f.area);
@@ -450,7 +461,14 @@ function areaCellProblems(name: string, cell: AreaCell | undefined): string[] {
     problems.push(`${name}: fontSize must be a number of pixels, from 4 to 400.`);
   }
   problems.push(...finishProblems(name, cell.finish, cell.type));
+  problems.push(...textStyleProblems(name, cell));
   return problems;
+}
+
+function textStyleProblems(name: string, style: TextStyle): string[] {
+  return TEXT_STYLES.filter((k) => style[k] !== undefined && typeof style[k] !== "boolean").map(
+    (k) => `${name}: ${k} must be true or false, without quotes.`
+  );
 }
 
 function finishProblems(name: string, finish: unknown, type: unknown): string[] {

@@ -5,7 +5,7 @@ import { SegmentCell } from "../cells/segment/SegmentCell";
 import { SplitFlapCell } from "../cells/splitflap/SplitFlapCell";
 import { FONTS, loadFont } from "../fonts";
 import type { Row } from "./binding";
-import { cellSpecs, composeBoard, fontsUsed, resolveStaticText, textBlocks, type TextBlock } from "./compose";
+import { cellSpecs, composeBoard, fontsUsed, resolveStaticText, textBlocks, type TextBlock, type TextSpec } from "./compose";
 import { parseArea, type BoardLayout, type Rect, type StaticArea } from "./layout";
 import "./Board.css";
 
@@ -135,6 +135,7 @@ function TextArea({ block }: { block: TextBlock }) {
         fontSize: style.fontSize,
         letterSpacing: style.letterSpacing ? `${style.letterSpacing}px` : undefined,
         lineHeight: style.lineHeight,
+        ...textStyleCss(style),
         textAlign: block.align,
         justifyContent: block.align === "right" ? "flex-end" : block.align === "center" ? "center" : "flex-start",
       }}
@@ -155,6 +156,7 @@ function StaticText({ area, rect, board }: { area: StaticArea; rect: Rect; board
         color: style.color,
         fontFamily: style.fontFamily,
         fontSize: style.fontSize,
+        ...textStyleCss(style),
         textAlign: align,
         justifyContent: align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start",
       }}
@@ -169,6 +171,15 @@ function placedAreas<A extends { area: string }>(layout: BoardLayout, areas: A[]
   return areas
     .map((a) => ({ ...a, rect: parseArea(a.area ?? "") }))
     .filter((a): a is A & { rect: Rect } => !!a.rect && a.rect.x2 < layout.columns && a.rect.y2 < layout.rows);
+}
+
+/** Bold, italic and underline as CSS; unset leaves the area's usual weight and style. */
+function textStyleCss(style: TextSpec): CSSProperties {
+  return {
+    fontWeight: style.bold ? 700 : undefined,
+    fontStyle: style.italic ? "italic" : undefined,
+    textDecoration: style.underline ? "underline" : undefined,
+  };
 }
 
 function gridArea(r: Rect): CSSProperties {

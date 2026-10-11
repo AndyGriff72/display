@@ -3,6 +3,7 @@ import { apiError } from "../api/client";
 import { deleteImage, listImages, uploadImage, type UploadedImage } from "../api/images";
 import { DEFAULT_COLOURS, type StaticArea } from "../board/layout";
 import { PositionFields, formatArea } from "./editor/PositionFields";
+import { TextStyleButtons } from "./editor/TextStyleButtons";
 import { FONTS } from "../fonts";
 
 const FITS: { value: NonNullable<StaticArea["fit"]>; label: string }[] = [
@@ -91,7 +92,16 @@ export function StaticAreasPanel({
             style={{ background: s.background ?? "#0c0c0d", border: s.border ? `${s.borderWidth ?? 1}px solid ${s.border}` : undefined }}
           >
             {isText(s) ? (
-              <span className="static-preview-text" style={{ color: s.color ?? DEFAULT_COLOURS.text, fontFamily: s.fontFamily }}>
+              <span
+                className="static-preview-text"
+                style={{
+                  color: s.color ?? DEFAULT_COLOURS.text,
+                  fontFamily: s.fontFamily,
+                  fontWeight: s.bold ? 700 : undefined,
+                  fontStyle: s.italic ? "italic" : undefined,
+                  textDecoration: s.underline ? "underline" : undefined,
+                }}
+              >
                 {s.text || "text"}
               </span>
             ) : s.image ? (
@@ -120,7 +130,16 @@ export function StaticAreasPanel({
                       i,
                       e.target.value === "text"
                         ? { text: s.text ?? "", image: undefined, fit: undefined, padding: undefined }
-                        : { text: undefined, color: undefined, fontFamily: undefined, fontSize: undefined, align: undefined }
+                        : {
+                            text: undefined,
+                            color: undefined,
+                            fontFamily: undefined,
+                            fontSize: undefined,
+                            align: undefined,
+                            bold: undefined,
+                            italic: undefined,
+                            underline: undefined,
+                          }
                     )
                   }
                   aria-label="Shows"
@@ -163,6 +182,7 @@ export function StaticAreasPanel({
                       style={{ width: 60 }}
                     />
                   </label>
+                  <TextStyleButtons value={s} onChange={(patch) => update(i, patch)} />
                   <select value={s.align ?? "left"} onChange={(e) => update(i, { align: e.target.value as StaticArea["align"] })} aria-label="Alignment">
                     <option value="left">Left</option>
                     <option value="center">Centre</option>
@@ -339,7 +359,7 @@ function isText(s: StaticArea): boolean {
 function withoutEmpty(s: StaticArea): StaticArea {
   const out = { ...s } as Record<string, unknown>;
   // Text is kept even when empty: it is what marks the area as showing text.
-  for (const key of ["image", "fit", "padding", "background", "border", "borderWidth", "color", "fontFamily", "fontSize", "align"]) {
+  for (const key of ["image", "fit", "padding", "background", "border", "borderWidth", "color", "fontFamily", "fontSize", "align", "bold", "italic", "underline"]) {
     if (out[key] === undefined || out[key] === "") delete out[key];
   }
   return out as unknown as StaticArea;

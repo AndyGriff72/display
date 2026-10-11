@@ -54,6 +54,9 @@ export interface TextSpec {
   letterSpacing: number;
   /** Line height, as a multiple of the font size. */
   lineHeight: number;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
 }
 
 /** A piece of text drawn over part of the grid: a text field, or one row of a text column. */
@@ -105,6 +108,9 @@ export function resolveText(board: CellSettings, own?: AreaCell): TextSpec {
     background: own?.background ?? (boardText ? board.background : undefined),
     letterSpacing: own?.letterSpacing ?? (boardText ? board.letterSpacing : undefined) ?? 0,
     lineHeight: own?.lineHeight ?? (boardText ? board.lineHeight : undefined) ?? DEFAULT_LINE_HEIGHT,
+    bold: own?.bold ?? (boardText ? board.bold : undefined) ?? false,
+    italic: own?.italic ?? (boardText ? board.italic : undefined) ?? false,
+    underline: own?.underline ?? (boardText ? board.underline : undefined) ?? false,
   };
 }
 
@@ -116,6 +122,9 @@ export function resolveStaticText(board: CellSettings, s: StaticArea): TextSpec 
     fontSize: s.fontSize ?? Math.round(board.height * 0.6),
     letterSpacing: 0,
     lineHeight: DEFAULT_LINE_HEIGHT,
+    bold: !!s.bold,
+    italic: !!s.italic,
+    underline: !!s.underline,
   };
 }
 

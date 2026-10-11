@@ -14,6 +14,7 @@ import {
   type BoardLayout,
   type CellType,
   type Finish,
+  type TextStyle,
 } from "../board/layout";
 import { useBoardData } from "../board/useBoardData";
 import { usePaging } from "../board/usePaging";
@@ -24,6 +25,7 @@ import { SAMPLE_RECORDS, SAMPLES, type LayoutShape } from "./boardSamples";
 import { OptionalColour, StaticAreasPanel } from "./StaticAreasPanel";
 import { CELL_LOOKS, lookById, lookId } from "./cellLooks";
 import { AreasEditor } from "./editor/AreasEditor";
+import { TextStyleButtons } from "./editor/TextStyleButtons";
 
 /** Each cell type starts in the colour it is best known in. */
 const DEFAULT_COLOURS: Record<CellType, string> = {
@@ -95,6 +97,7 @@ export default function BoardEditorPage() {
   const [textBackground, setTextBackground] = useState<string | undefined>(undefined);
   const [letterSpacing, setLetterSpacing] = useState<number | undefined>(undefined);
   const [lineHeight, setLineHeight] = useState<number | undefined>(undefined);
+  const [textStyle, setTextStyle] = useState<TextStyle>({});
   const [cellWidth, setCellWidth] = useState(SAMPLES[0].cellWidth);
   const [cellHeight, setCellHeight] = useState(SAMPLES[0].cellHeight);
   // The gaps between cells, across and down; unset means the usual proportion of the cell.
@@ -196,11 +199,14 @@ export default function BoardEditorPage() {
               ...(textBackground ? { background: textBackground } : {}),
               ...(letterSpacing ? { letterSpacing } : {}),
               ...(lineHeight !== undefined ? { lineHeight } : {}),
+              ...(textStyle.bold ? { bold: true } : {}),
+              ...(textStyle.italic ? { italic: true } : {}),
+              ...(textStyle.underline ? { underline: true } : {}),
             }
           : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, segments, finish, textSize, textBackground, letterSpacing, lineHeight]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -225,6 +231,7 @@ export default function BoardEditorPage() {
     setTextBackground(cell.background);
     setLetterSpacing(cell.letterSpacing);
     setLineHeight(cell.lineHeight);
+    setTextStyle({ bold: cell.bold, italic: cell.italic, underline: cell.underline });
     setCellWidth(cell.width);
     setCellHeight(cell.height);
     setGapX(cell.gapX);
@@ -544,6 +551,10 @@ export default function BoardEditorPage() {
                   {cellType === "text" && (
                     <>
                       <Slider label="Text size" unit="px" value={textSize ?? Math.round(cellHeight * 0.6)} min={6} max={200} onChange={setTextSize} />
+                      <div className="labelled-control">
+                        <span>Style</span>
+                        <TextStyleButtons value={textStyle} onChange={(patch) => setTextStyle({ ...textStyle, ...patch })} />
+                      </div>
                       <OptionalColour label="Background behind the text" value={textBackground} fallback="#1b1b1d" onChange={setTextBackground} />
                       <Slider label="Letter spacing" unit="px" value={letterSpacing ?? 0} min={-4} max={30} onChange={setLetterSpacing} />
                       <Slider label="Line spacing" unit="×" value={lineHeight ?? DEFAULT_LINE_HEIGHT} min={0.8} max={3} step={0.05} onChange={setLineHeight} />
@@ -638,6 +649,7 @@ export default function BoardEditorPage() {
                 boardFinish={finish}
                 boardColour={colour}
                 cellHeight={cellHeight}
+                boardTextStyle={cellType === "text" ? textStyle : undefined}
                 dataColumns={shape.dataSource ? data.columns : feed === BUILT_IN ? Object.keys(SAMPLE_RECORDS[0] ?? {}) : []}
                 showing={boardValues}
                 onChange={({ fields: f, lists: l }) => replaceShape({ ...shape, fields: f, lists: l })}

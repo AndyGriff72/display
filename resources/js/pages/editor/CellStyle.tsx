@@ -6,10 +6,12 @@ import {
   type AreaCellType,
   type CellType,
   type Finish,
+  type TextStyle,
 } from "../../board/layout";
 import { FONTS } from "../../fonts";
 import { OptionalColour } from "../StaticAreasPanel";
 import { CELL_LOOKS, lookById, lookId, lookLabel } from "../cellLooks";
+import { TextStyleButtons } from "./TextStyleButtons";
 
 /** Choose an area's cell type, then the settings that type has. */
 export function CellStyle({
@@ -18,6 +20,7 @@ export function CellStyle({
   boardFinish,
   boardColour,
   cellHeight,
+  boardTextStyle,
   onChange,
 }: {
   cell?: AreaCell;
@@ -25,6 +28,8 @@ export function CellStyle({
   boardFinish?: Finish;
   boardColour: string;
   cellHeight: number;
+  /** A text board's bold, italic and underline, which its text areas take unless they say otherwise. */
+  boardTextStyle?: TextStyle;
   onChange: (cell: AreaCell | undefined) => void;
 }) {
   const type = cell?.type;
@@ -48,6 +53,7 @@ export function CellStyle({
       finish,
       color: finish !== cell?.finish ? undefined : cell?.color,
       background: hasBackground(next ?? boardType) ? cell?.background : undefined,
+      ...((next ?? boardType) === "text" ? { bold: cell?.bold, italic: cell?.italic, underline: cell?.underline } : {}),
     });
     onChange(Object.keys(kept).length ? kept : undefined);
   };
@@ -92,6 +98,9 @@ export function CellStyle({
             </option>
           ))}
         </select>
+      )}
+      {drawnAs === "text" && (
+        <TextStyleButtons value={cell ?? {}} inherited={boardType === "text" ? boardTextStyle : undefined} onChange={set} />
       )}
       {type === "segment" && (
         <select value={cell?.segments ?? 14} onChange={(e) => set({ segments: Number(e.target.value) as 7 | 14 })} aria-label="Segments">

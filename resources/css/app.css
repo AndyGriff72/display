@@ -870,3 +870,55 @@ code.chip {
     border-top: 1px solid #3a3a3e;
   }
 }
+
+/* A control with a caption above it, like the labels around it, for controls that are not inputs. */
+.labelled-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Bold, italic and underline: three small buttons that stay pressed while on. */
+.text-style-buttons {
+  display: inline-flex;
+}
+
+.text-style-buttons button {
+  min-width: 30px;
+  padding: 3px 8px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.2;
+  border-radius: 0;
+  text-transform: none;
+}
+
+.text-style-buttons button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.text-style-buttons button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.text-style-buttons button + button {
+  margin-left: -1px;
+}
+
+.text-style-buttons button[aria-pressed="true"] {
+  background: #3d5a80;
+  border-color: #6f93c0;
+  color: #fff;
+}
+
+.text-style-bold {
+  font-weight: 700;
+}
+
+.text-style-italic {
+  font-style: italic;
+}
+
+.text-style-underline {
+  text-decoration: underline;
+}

@@ -1,4 +1,4 @@
-import { columnOffsets, parseArea, type CellType, type FieldArea, type Finish, type ListArea, type ListColumn } from "../../board/layout";
+import { columnOffsets, parseArea, type CellType, type FieldArea, type Finish, type ListArea, type ListColumn, type TextStyle } from "../../board/layout";
 import { OptionalColour } from "../StaticAreasPanel";
 import { CellStyle, withCell } from "./CellStyle";
 import { PositionFields, formatArea } from "./PositionFields";
@@ -19,6 +19,8 @@ export interface AreasEditorProps {
   boardFinish?: Finish;
   boardColour: string;
   cellHeight: number;
+  /** A text board's bold, italic and underline. */
+  boardTextStyle?: TextStyle;
   /** Columns the data has, offered as a reminder of what templates can use. */
   dataColumns: string[];
   /** What each field shows right now, by id. */
@@ -36,7 +38,7 @@ export interface AreasEditorProps {
  */
 export function AreasEditor(props: AreasEditorProps) {
   const { fields, lists, columns, rows, onChange } = props;
-  const style = { boardType: props.boardType, boardFinish: props.boardFinish, boardColour: props.boardColour, cellHeight: props.cellHeight };
+  const style = { boardType: props.boardType, boardFinish: props.boardFinish, boardColour: props.boardColour, cellHeight: props.cellHeight, boardTextStyle: props.boardTextStyle };
 
   const setField = (i: number, patch: Partial<FieldArea>) =>
     onChange({ fields: fields.map((f, j) => (j === i ? tidyField({ ...f, ...patch }) : f)), lists });
