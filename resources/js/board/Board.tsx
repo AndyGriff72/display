@@ -1,11 +1,23 @@
-import { useEffect, useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { DotMatrixCell } from "../cells/dotmatrix/DotMatrixCell";
 import { FlipDotCell } from "../cells/flipdot/FlipDotCell";
 import { SegmentCell } from "../cells/segment/SegmentCell";
 import { SplitFlapCell } from "../cells/splitflap/SplitFlapCell";
+import { WholeValueFlap } from "../cells/splitflap/WholeValueFlap";
 import { FONTS, loadFont } from "../fonts";
 import type { Row } from "./binding";
-import { cellSpecs, composeBoard, fontsUsed, resolveStaticText, textBlocks, type TextBlock, type TextSpec } from "./compose";
+import {
+  cellSpecs,
+  composeBoard,
+  drumFaces,
+  fontsUsed,
+  resolveStaticText,
+  textBlocks,
+  wholeValueFlaps,
+  type TextBlock,
+  type TextSpec,
+  type WholeValueFlap as Flap,
+} from "./compose";
 import { parseArea, type BoardLayout, type Rect, type StaticArea } from "./layout";
 import "./Board.css";
 
@@ -36,6 +48,8 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
   const cells = useMemo(() => composeBoard(layout, values, records, page), [layout, values, records, page]);
   const texts = useMemo(() => textBlocks(layout, values, records, page), [layout, values, records, page]);
   const statics = useMemo(() => placedAreas(layout, layout.statics ?? []), [layout]);
+  const flaps = useMemo(() => wholeValueFlaps(layout, values, records, page), [layout, values, records, page]);
+  const drums = useDrums(flaps);
   const fields = useMemo(
     () => (showAreas ? placedAreas(layout, [...(layout.fields ?? []), ...(layout.lists ?? [])]) : []),
     [layout, showAreas]
@@ -49,11 +63,13 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
     }
   }, [layout]);
 
+  const gapX = cell.gapX ?? Math.round(cell.width * 0.08);
+  const gapY = cell.gapY ?? Math.round(cell.height * 0.12);
   const gridStyle: CSSProperties = {
     gridTemplateColumns: `repeat(${layout.columns}, ${cell.width}px)`,
     gridTemplateRows: `repeat(${layout.rows}, ${cell.height}px)`,
-    columnGap: cell.gapX ?? Math.round(cell.width * 0.08),
-    rowGap: cell.gapY ?? Math.round(cell.height * 0.12),
+    columnGap: gapX,
+    rowGap: gapY,
   };
 
   return (
@@ -90,6 +106,28 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
             );
         }
       })}
+      {flaps.map((f) => {
+        const across = f.rect.x2 - f.rect.x1 + 1;
+        const down = f.rect.y2 - f.rect.y1 + 1;
+        return (
+          <WholeValueFlap
+            key={f.key}
+            value={f.value}
+            faces={drums.get(f.drumKey) ?? [""]}
+            width={across * cell.width + (across - 1) * gapX}
+            height={down * cell.height + (down - 1) * gapY}
+            cellWidth={cell.width}
+            cellHeight={cell.height}
+            fontFamily={f.spec.fontFamily}
+            color={f.spec.color}
+            background={f.spec.background}
+            flipMs={f.spec.flipMs}
+            align={f.align}
+            onFlap={onFlap}
+            style={gridArea(f.rect)}
+          />
+        );
+      })}
       {texts.map((t) => (
         <TextArea key={t.key} block={t} />
       ))}
@@ -116,6 +154,32 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
       ))}
     </div>
   );
+}
+
+/**
+ * The faces on each whole-value drum, by drum. A drum only ever gains faces while the board is
+ * up: a value that leaves the data keeps its face, so the drum never reshuffles, as a real one
+ * cannot. Each drum's list stays the same object until it changes, so its flaps need not redraw.
+ */
+function useDrums(flaps: Flap[]): Map<string, string[]> {
+  const seen = useRef(new Map<string, { values: Set<string>; given: string; faces: string[] }>());
+  return useMemo(() => {
+    const drums = new Map<string, string[]>();
+    for (const f of flaps) {
+      if (drums.has(f.drumKey)) continue;
+      const given = JSON.stringify(f.drum);
+      let drum = seen.current.get(f.drumKey);
+      if (!drum) seen.current.set(f.drumKey, (drum = { values: new Set(), given, faces: [] }));
+      const size = drum.values.size;
+      f.values.forEach((v) => drum.values.add(v));
+      if (drum.values.size !== size || drum.given !== given || drum.faces.length === 0) {
+        drum.given = given;
+        drum.faces = drumFaces(f.drum, drum.values);
+      }
+      drums.set(f.drumKey, drum.faces);
+    }
+    return drums;
+  }, [flaps]);
 }
 
 /**

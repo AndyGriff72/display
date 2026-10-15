@@ -112,3 +112,9 @@
     filter: brightness(1);
   }
 }
+
+/* A whole-value flap: one long flap across an area, a whole value on each face (WholeValueFlap). */
+.sf-whole .sf-glyph {
+  box-sizing: border-box;
+  overflow: hidden;
+}

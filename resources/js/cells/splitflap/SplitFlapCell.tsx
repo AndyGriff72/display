@@ -110,7 +110,7 @@ function Half({ pos, glyph, flap }: { pos: "top" | "bottom"; glyph: string; flap
  * A flap colour and the darker shades the flap's styles use with it, in the same proportions
  * as the default near-black ones (--sf-bg-a and --sf-bg-b about 88% and 70% of --sf-bg).
  */
-function flapShades(colour: string): Record<string, string> {
+export function flapShades(colour: string): Record<string, string> {
   const shade = (percent: number) => `color-mix(in srgb, ${colour} ${percent}%, #000)`;
   return { "--sf-bg": colour, "--sf-bg-a": shade(88), "--sf-bg-b": shade(70), "--sf-bg-edge": shade(58) };
 }

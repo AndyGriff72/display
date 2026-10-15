@@ -1,4 +1,4 @@
-import { columnOffsets, parseArea, type CellType, type FieldArea, type Finish, type ListArea, type ListColumn, type TextStyle } from "../../board/layout";
+import { columnOffsets, parseArea, type CellType, type FieldArea, type Finish, type ListArea, type ListColumn, type TextStyle, type WholeValue } from "../../board/layout";
 import { OptionalColour } from "../StaticAreasPanel";
 import { CellStyle, withCell } from "./CellStyle";
 import { PositionFields, formatArea } from "./PositionFields";
@@ -125,6 +125,7 @@ export function AreasEditor(props: AreasEditorProps) {
               <span className="hint">now: {props.showing[f.id] ? `"${props.showing[f.id]}"` : "nothing"}</span>
             </div>
             <CellStyle cell={f.cell} {...style} onChange={(cell) => onChange({ fields: fields.map((x, j) => (j === i ? withCell(x, cell) : x)), lists })} />
+            {(f.cell?.type ?? props.boardType) === "splitflap" && <WholeValueOption area={f} onChange={(patch) => setField(i, patch)} />}
           </div>
         );
       })}
@@ -211,6 +212,7 @@ export function AreasEditor(props: AreasEditorProps) {
                     {...style}
                     onChange={(cell) => setList(l, { columns: cols.map((x, k) => (k === c ? withCell(x, cell) : x)) })}
                   />
+                  {(col.cell?.type ?? props.boardType) === "splitflap" && <WholeValueOption area={col} onChange={(patch) => setColumn(l, c, patch)} />}
                 </div>
               ))}
               <button onClick={() => setList(l, { columns: [...cols, { title: "", text: "" }] })}>+ Add a column</button>
@@ -223,15 +225,50 @@ export function AreasEditor(props: AreasEditorProps) {
   );
 }
 
+/**
+ * Split-flap only: show the whole value on one long flap, and optionally which faces its drum
+ * has, in order. The faces are typed one per line; blank lines are kept while typing (so a new
+ * line can be started) and tidied away when the box is left.
+ */
+function WholeValueOption({ area, onChange }: { area: WholeValue; onChange: (patch: WholeValue) => void }) {
+  const drum = Array.isArray(area.drum) ? area.drum : [];
+  return (
+    <div className="whole-value">
+      <label className="inline" title="Show the whole value on one long flap, as station boards do for statuses, instead of a cell per character">
+        <input type="checkbox" checked={!!area.merged} onChange={(e) => onChange({ merged: e.target.checked || undefined })} />
+        One flap for the whole value
+      </label>
+      {area.merged && (
+        <label>
+          Values, in drum order <span className="hint">(optional)</span>
+          <textarea
+            rows={3}
+            value={drum.join("\n")}
+            onChange={(e) => onChange({ drum: e.target.value.split("\n") })}
+            onBlur={() => onChange({ drum: drum.map((f) => f.trim()).filter((f) => f !== "") })}
+            placeholder={"One per line, e.g.\nON TIME\nDELAYED\nCANCELLED"}
+          />
+          <span className="hint">Any other values in the data follow these, alphabetically.</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
 /** Leave out settings that are back at their defaults, rather than saving them empty. */
 function tidyField(f: FieldArea): FieldArea {
-  const out = { ...f } as Record<string, unknown>;
-  for (const key of ["align", "row"]) if (out[key] === undefined || out[key] === "left") delete out[key];
-  return out as unknown as FieldArea;
+  return tidyKeys(f, ["align", "row", "merged", "drum"]);
 }
 
 function tidyColumn(c: ListColumn): ListColumn {
-  const out = { ...c } as Record<string, unknown>;
-  for (const key of ["x", "width", "align"]) if (out[key] === undefined || out[key] === "left") delete out[key];
-  return out as unknown as ListColumn;
+  return tidyKeys(c, ["x", "width", "align", "merged", "drum"]);
+}
+
+function tidyKeys<T extends object>(area: T, keys: string[]): T {
+  const out = { ...area } as Record<string, unknown>;
+  for (const key of keys) {
+    const v = out[key];
+    if (v === undefined || v === "left" || (Array.isArray(v) && v.length === 0)) delete out[key];
+  }
+  return out as T;
 }

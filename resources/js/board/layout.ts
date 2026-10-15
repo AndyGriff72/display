@@ -167,7 +167,21 @@ export interface FieldArea {
   row?: number;
   /** Its own cell type and look, instead of the board's. */
   cell?: AreaCell;
+  /** Split-flap: one flap for the whole value, rather than a cell per character. See WholeValue. */
+  merged?: boolean;
+  /** Split-flap, with merged: the faces on the drum, in order. See WholeValue. */
+  drum?: string[];
 }
+
+/**
+ * Split-flap fields and list columns can show their whole value on one long flap, as real
+ * boards do for statuses ("ON TIME", "DELAYED"), instead of a cell per character.
+ *
+ * The drum holds a blank face, then the faces in `drum` in the order given, then every other
+ * value the area has in the data, alphabetically. A value matching a face in `drum` apart from
+ * capitals shows that face. Other cell types ignore both settings.
+ */
+export type WholeValue = Pick<FieldArea, "merged" | "drum">;
 
 /** One column of a list: what it shows for each record, and how many characters wide it is. */
 export interface ListColumn {
@@ -186,6 +200,10 @@ export interface ListColumn {
   align?: "left" | "right" | "center";
   /** Its own cell type and look, instead of the board's. */
   cell?: AreaCell;
+  /** Split-flap: one flap per record for the whole value. See WholeValue. A header stays as cells. */
+  merged?: boolean;
+  /** Split-flap, with merged: the faces on the drum, in order. See WholeValue. */
+  drum?: string[];
 }
 
 /**
@@ -364,6 +382,7 @@ export function validateLayout(layout: BoardLayout): string[] {
       errors.push(`Field "${f.id}": row must be a whole number, counting from 0 for the first row of data.`);
     }
     errors.push(...areaCellProblems(`Field "${f.id}"`, f.cell));
+    errors.push(...wholeValueProblems(`Field "${f.id}"`, f));
   }
 
   for (const l of layout.lists ?? []) {
@@ -417,6 +436,7 @@ function listProblems(list: ListArea, rect: Rect | null): string[] {
     const which = `${name}, column ${i + 1}`;
     const last = i === list.columns.length - 1;
     problems.push(...areaCellProblems(which, c?.cell));
+    problems.push(...wholeValueProblems(which, c ?? {}));
     if (typeof c?.text !== "string") problems.push(`${which}: text must be written in quotes, e.g. "{destination}".`);
     if (c?.x !== undefined && !(Number.isInteger(c.x) && c.x >= 0)) {
       problems.push(`${which}: its start must be a whole number of cells from the list's left edge.`);
@@ -443,6 +463,15 @@ function listProblems(list: ListArea, rect: Rect | null): string[] {
     if (list.header && areaHeight(rect) < 2) {
       problems.push(`${name}: with a header row it needs at least two rows, one for the header and one for a record.`);
     }
+  }
+  return problems;
+}
+
+function wholeValueProblems(name: string, area: WholeValue): string[] {
+  const problems: string[] = [];
+  if (area.merged !== undefined && typeof area.merged !== "boolean") problems.push(`${name}: merged must be true or false, without quotes.`);
+  if (area.drum !== undefined && !(Array.isArray(area.drum) && area.drum.every((f) => typeof f === "string"))) {
+    problems.push(`${name}: drum must be a list of faces in quotes, e.g. ["ON TIME", "DELAYED"].`);
   }
   return problems;
 }

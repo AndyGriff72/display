@@ -922,3 +922,15 @@ code.chip {
 .text-style-underline {
   text-decoration: underline;
 }
+
+/* Split-flap: one flap for the whole value, and the faces on its drum. */
+.whole-value {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.whole-value textarea {
+  text-transform: none;
+}
