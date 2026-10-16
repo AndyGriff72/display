@@ -58,7 +58,14 @@
   transform-origin: 50% calc(var(--sf-gap) / -2);
 }
 
-/* The glyph is the full cell height; each half shows the part of it that falls inside. */
+/*
+ * The glyph is the full cell height; each half shows its half of it. As on a real flap, the
+ * character is printed whole across the two flaps, the gap between them pushing its halves
+ * apart rather than hiding a strip from its middle (where the bars of A, E and H are): so each
+ * half's glyph is set against that half's outer edge and moved out by half the gap, and by
+ * the 1px border along the top of each half (the bottom half's lies along the join, and would
+ * otherwise cover a row of the glyph there).
+ */
 .sf-glyph {
   position: absolute;
   left: 0;
@@ -70,11 +77,11 @@
 }
 
 .sf-top .sf-glyph {
-  top: 0;
+  top: calc(-1px - var(--sf-gap) / 2);
 }
 
 .sf-bottom .sf-glyph {
-  bottom: 0;
+  bottom: calc(-1px - var(--sf-gap) / 2);
 }
 
 .sf-flaps .sf-flap {
