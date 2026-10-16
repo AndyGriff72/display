@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiError } from "../api/client";
 import { imageSource } from "../board/images";
+import { lastBoardPath } from "../editorNavigation";
 import {
   deleteDataSource,
   listColumns,
@@ -270,6 +271,10 @@ export default function DataSourcesPage() {
     <main className="page wide-page">
       <h1>Data sources</h1>
       <p className="lede">What a board shows: rows from the connected database.</p>
+      <p className="hint">
+        Choosing a data source here only opens it for editing. To show one on a board, pick it in the board editor under{" "}
+        <strong>Board › Data</strong>, then save the board. <Link to={lastBoardPath()}>Open boards</Link>
+      </p>
 
       <div className="split">
         <aside className="source-list">

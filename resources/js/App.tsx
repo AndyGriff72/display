@@ -4,6 +4,7 @@ import ConnectionPage from "./pages/ConnectionPage";
 import DataSourcesPage from "./pages/DataSourcesPage";
 import ScreenPage from "./pages/ScreenPage";
 import { csrfToken } from "./api/client";
+import { confirmLeavingEditor, lastBoardPath } from "./editorNavigation";
 
 const userName = document.querySelector<HTMLMetaElement>('meta[name="user-name"]')?.content ?? "";
 
@@ -29,14 +30,23 @@ function Nav() {
   const onBoards = pathname === "/" || pathname.startsWith("/boards");
   // A screen shows the board alone.
   if (pathname.startsWith("/screen/")) return null;
+  // Leaving the editor with unsaved changes asks first.
+  const leave = (e: React.MouseEvent) => {
+    if (onBoards && !confirmLeavingEditor()) e.preventDefault();
+  };
   return (
     <nav className="topnav">
       <span className="brand">Display Board</span>
-      <NavLink to="/" className={() => (onBoards ? "active" : "")}>
+      {/* Back to the board last open, not a new one. */}
+      <NavLink to={onBoards ? pathname : lastBoardPath()} className={() => (onBoards ? "active" : "")}>
         Boards
       </NavLink>
-      <NavLink to="/data-sources">Data sources</NavLink>
-      <NavLink to="/connection">Connection</NavLink>
+      <NavLink to="/data-sources" onClick={leave}>
+        Data sources
+      </NavLink>
+      <NavLink to="/connection" onClick={leave}>
+        Connection
+      </NavLink>
       <span className="topnav-user">
         {userName}
         <form method="post" action="/logout">

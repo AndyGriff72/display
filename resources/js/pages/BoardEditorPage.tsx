@@ -26,6 +26,7 @@ import { OptionalColour, StaticAreasPanel } from "./StaticAreasPanel";
 import { CELL_LOOKS, lookById, lookId } from "./cellLooks";
 import { AreasEditor } from "./editor/AreasEditor";
 import { TextStyleButtons } from "./editor/TextStyleButtons";
+import { rememberBoard, setUnsavedChangesCheck } from "../editorNavigation";
 
 /** Each cell type starts in the colour it is best known in. */
 const DEFAULT_COLOURS: Record<CellType, string> = {
@@ -73,6 +74,9 @@ export default function BoardEditorPage() {
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
   // Set when a board has just been opened: its snapshot is taken once the controls show it.
   const pendingSnapshot = useRef<string | null>(null);
+  // A new board, as it was when the editor started it: leaving it untouched loses nothing.
+  const [startSnapshot, setStartSnapshot] = useState<string | null>(null);
+  const pendingStart = useRef(false);
   // The board the editor already shows, so saving a new board does not reload it. Starts as
   // "nothing yet", so the first render always opens whatever the address names.
   const shownId = useRef<number | undefined | null>(null);
@@ -217,6 +221,8 @@ export default function BoardEditorPage() {
   );
   const current = snapshot(name.trim(), fullLayout);
   const dirty = savedSnapshot === null || current !== savedSnapshot;
+  // Whether leaving would lose anything: changes since the board was saved, opened or started.
+  const changed = current !== (savedSnapshot ?? startSnapshot);
 
   /** Show a layout in the editor: its structure in the JSON, its appearance in the controls. */
   const applyLayout = (l: BoardLayout) => {
@@ -257,6 +263,8 @@ export default function BoardEditorPage() {
 
   // Open the board in the address, or start a new one.
   useEffect(() => {
+    // Remembered for the "Boards" link, including a board just saved for the first time.
+    rememberBoard(boardId);
     if (boardId === shownId.current) return;
     shownId.current = boardId;
     setBoardNotice(null);
@@ -265,6 +273,7 @@ export default function BoardEditorPage() {
       applyLayout({ ...sample.layout, cell: { type: "splitflap", width: sample.cellWidth, height: sample.cellHeight } });
       setName("");
       setSavedSnapshot(null);
+      pendingStart.current = true;
       return;
     }
     getBoard(boardId)
@@ -277,6 +286,13 @@ export default function BoardEditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardId]);
 
+  // Once a new board is showing, remember how it started.
+  useEffect(() => {
+    if (!pendingStart.current) return;
+    setStartSnapshot(snapshot("", fullLayout));
+    pendingStart.current = false;
+  }, [fullLayout]);
+
   // Once an opened board is showing, remember it as saved.
   useEffect(() => {
     if (pendingSnapshot.current === null) return;
@@ -286,11 +302,19 @@ export default function BoardEditorPage() {
 
   // Warn before leaving the page with unsaved changes.
   useEffect(() => {
-    if (!dirty || savedSnapshot === null) return;
+    if (!changed) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty, savedSnapshot]);
+  }, [changed]);
+
+  // ...and before following the app's own links away from the editor.
+  const changedRef = useRef(changed);
+  changedRef.current = changed;
+  useEffect(() => {
+    setUnsavedChangesCheck(() => changedRef.current);
+    return () => setUnsavedChangesCheck(null);
+  }, []);
 
   const save = async (asNew: boolean) => {
     let saveName = name.trim();
@@ -334,7 +358,7 @@ export default function BoardEditorPage() {
   };
 
   const openBoard = (value: string) => {
-    if (dirty && savedSnapshot !== null && !window.confirm("Leave this board without saving your changes?")) return;
+    if (changed && !window.confirm("Leave this board without saving your changes?")) return;
     navigate(value ? "/boards/" + value : "/");
   };
 
