@@ -118,3 +118,10 @@
   box-sizing: border-box;
   overflow: hidden;
 }
+
+/* Image faces: each image fills the flap's face; the halves show its top and bottom. */
+.sf-images .sf-glyph img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

@@ -11,6 +11,7 @@ import {
   composeBoard,
   drumFaces,
   fontsUsed,
+  imageAreas,
   resolveStaticText,
   textBlocks,
   wholeValueFlaps,
@@ -50,6 +51,7 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
   const statics = useMemo(() => placedAreas(layout, layout.statics ?? []), [layout]);
   const flaps = useMemo(() => wholeValueFlaps(layout, values, records, page), [layout, values, records, page]);
   const drums = useDrums(flaps);
+  const images = useMemo(() => imageAreas(layout, values, records, page), [layout, values, records, page]);
   const fields = useMemo(
     () => (showAreas ? placedAreas(layout, [...(layout.fields ?? []), ...(layout.lists ?? [])]) : []),
     [layout, showAreas]
@@ -123,11 +125,18 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
             background={f.spec.background}
             flipMs={f.spec.flipMs}
             align={f.align}
+            images={f.image}
+            fit={f.fit}
             onFlap={onFlap}
             style={gridArea(f.rect)}
           />
         );
       })}
+      {images.map((im) => (
+        <div key={im.key} className="board-value-image" style={gridArea(im.rect)}>
+          {im.src && <img src={im.src} alt="" style={{ objectFit: im.fit }} />}
+        </div>
+      ))}
       {texts.map((t) => (
         <TextArea key={t.key} block={t} />
       ))}
@@ -174,7 +183,7 @@ function useDrums(flaps: Flap[]): Map<string, string[]> {
       f.values.forEach((v) => drum.values.add(v));
       if (drum.values.size !== size || drum.given !== given || drum.faces.length === 0) {
         drum.given = given;
-        drum.faces = drumFaces(f.drum, drum.values);
+        drum.faces = drumFaces(f.drum, drum.values, f.image);
       }
       drums.set(f.drumKey, drum.faces);
     }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiError } from "../api/client";
+import { imageSource } from "../board/images";
 import {
   deleteDataSource,
   listColumns,
@@ -542,7 +543,7 @@ export default function DataSourcesPage() {
                     {preview.rows.map((row, i) => (
                       <tr key={i}>
                         {preview.columns.map((c) => (
-                          <td key={c}>{row[c] === null ? <span className="hint">no value</span> : String(row[c])}</td>
+                          <td key={c}>{previewValue(row[c])}</td>
                         ))}
                       </tr>
                     ))}
@@ -555,4 +556,11 @@ export default function DataSourcesPage() {
       </div>
     </main>
   );
+}
+
+/** A value in the preview table: an image as a small picture, nothing as a hint, the rest as text. */
+function previewValue(value: Row[string]) {
+  if (value === null) return <span className="hint">no value</span>;
+  const src = imageSource(value);
+  return src ? <img className="preview-image" src={src} alt="an image" /> : String(value);
 }

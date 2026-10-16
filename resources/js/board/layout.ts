@@ -171,7 +171,20 @@ export interface FieldArea {
   merged?: boolean;
   /** Split-flap, with merged: the faces on the drum, in order. See WholeValue. */
   drum?: string[];
+  /** Show the value as an image. See ImageValue. */
+  image?: boolean;
+  /** How an image fills the area, as for static areas. Defaults to "contain". */
+  fit?: "contain" | "cover" | "fill";
 }
+
+/**
+ * A field or list column can show images from the data (see board/images.ts for which values
+ * count as images) instead of text. On split-flap each image is a face on one long flap, its
+ * drum made of the images in the data, as for merged values; on any other kind of cell the
+ * image is drawn plainly over the area. A value that is not an image leaves the area bare.
+ * A list column's header stays as text.
+ */
+export type ImageValue = Pick<FieldArea, "image" | "fit">;
 
 /**
  * Split-flap fields and list columns can show their whole value on one long flap, as real
@@ -204,6 +217,10 @@ export interface ListColumn {
   merged?: boolean;
   /** Split-flap, with merged: the faces on the drum, in order. See WholeValue. */
   drum?: string[];
+  /** Show each record's value as an image. See ImageValue. */
+  image?: boolean;
+  /** How an image fills its space. Defaults to "contain". */
+  fit?: "contain" | "cover" | "fill";
 }
 
 /**
@@ -467,8 +484,10 @@ function listProblems(list: ListArea, rect: Rect | null): string[] {
   return problems;
 }
 
-function wholeValueProblems(name: string, area: WholeValue): string[] {
+function wholeValueProblems(name: string, area: WholeValue & ImageValue): string[] {
   const problems: string[] = [];
+  if (area.image !== undefined && typeof area.image !== "boolean") problems.push(`${name}: image must be true or false, without quotes.`);
+  if (area.fit !== undefined && !FITS.includes(area.fit)) problems.push(`${name}: fit must be one of ${FITS.map((f) => `"${f}"`).join(", ")}.`);
   if (area.merged !== undefined && typeof area.merged !== "boolean") problems.push(`${name}: merged must be true or false, without quotes.`);
   if (area.drum !== undefined && !(Array.isArray(area.drum) && area.drum.every((f) => typeof f === "string"))) {
     problems.push(`${name}: drum must be a list of faces in quotes, e.g. ["ON TIME", "DELAYED"].`);

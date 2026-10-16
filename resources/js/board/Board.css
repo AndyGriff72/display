@@ -37,6 +37,19 @@
   border-radius: inherit;
 }
 
+/* An image from the data, drawn plainly over a field or a list row's column. */
+.board-value-image {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.board-value-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .board-field-outline {
   position: relative;
   z-index: 3;

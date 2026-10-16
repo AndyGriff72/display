@@ -27,8 +27,10 @@ import {
   type ListColumn,
   type Rect,
   type StaticArea,
+  type ImageValue,
   type WholeValue,
 } from "./layout";
+import { imageSource } from "./images";
 
 /** How one character cell looks: everything a cell component needs but its character. */
 export interface CellSpec {
@@ -170,7 +172,7 @@ export function cellSpecs(layout: BoardLayout): Map<string, CellSpec> {
     if (!rect) continue;
     const spec = resolveCell(layout.cell, field.cell);
     // A whole-value flap covers the area instead of cells (see wholeValueFlaps).
-    const cells = isWholeValue(field, spec) ? null : spec;
+    const cells = isWholeValue(field, spec) || isPlainImage(field, spec) ? null : spec;
     for (let y = rect.y1; y <= rect.y2; y++) for (let x = rect.x1; x <= rect.x2; x++) put(x, y, cells);
   }
 
@@ -181,11 +183,11 @@ export function cellSpecs(layout: BoardLayout): Map<string, CellSpec> {
     const headerColour = list.headerColor ?? DEFAULT_HEADER_COLOR;
     list.columns.forEach((column, i) => {
       const look = resolveCell(layout.cell, column?.cell);
-      const whole = isWholeValue(column, look);
+      const whole = isWholeValue(column, look) || isPlainImage(column, look);
       for (let y = rect.y1; y <= rect.y2; y++) {
         const header = list.header && y === rect.y1;
         for (let x = spans[i].x1; x <= spans[i].x2; x++) {
-          // A whole-value column keeps cells for its header only; its records are flaps.
+          // A whole-value or image column keeps cells for its header only; its records are flaps or images.
           put(x, y, look && header ? { ...look, color: headerColour } : whole ? null : look);
         }
       }
@@ -284,7 +286,7 @@ export function textBlocks(layout: BoardLayout, values: Record<string, string>, 
   const blocks: TextBlock[] = [];
 
   for (const field of layout.fields ?? []) {
-    if ((field.cell?.type ?? layout.cell.type) !== "text") continue;
+    if ((field.cell?.type ?? layout.cell.type) !== "text" || field.image) continue;
     const rect = parseArea(field.area ?? "");
     if (!rect) continue;
     blocks.push({
@@ -318,6 +320,8 @@ export function textBlocks(layout: BoardLayout, values: Record<string, string>, 
       // The header is a label above the column: in the header colour, on the board itself,
       // so the column's background starts with its first record and can never hide its title.
       if (list.header) block(y++, column.title ?? "", list.headerColor ?? DEFAULT_HEADER_COLOR);
+      // An image column's records are images (see imageAreas): only its header is text.
+      if (column.image) return;
       for (const record of rows) block(y++, record ? renderTemplate(String(column.text ?? ""), record) : "");
     });
   }
@@ -325,22 +329,93 @@ export function textBlocks(layout: BoardLayout, values: Record<string, string>, 
   return blocks;
 }
 
-/** Whether an area shows its whole value on one flap: asked to, and drawn as split-flap. */
-export function isWholeValue(area: WholeValue | undefined, spec: CellSpec | null): boolean {
-  return area?.merged === true && spec?.type === "splitflap";
+/**
+ * Whether an area shows its whole value on one flap: drawn as split-flap, and asked to (merged),
+ * or showing images, which on a split-flap board are always whole flaps.
+ */
+export function isWholeValue(area: (WholeValue & ImageValue) | undefined, spec: CellSpec | null): boolean {
+  return (area?.merged === true || area?.image === true) && spec?.type === "splitflap";
 }
 
-/** One long split-flap showing a whole value: a merged field, or one record of a merged list column. */
+/** Whether an area shows images drawn plainly over its space: images, on anything but split-flap. */
+export function isPlainImage(area: ImageValue | undefined, spec: CellSpec | null): boolean {
+  return area?.image === true && spec?.type !== "splitflap";
+}
+
+/**
+ * Each place a field or list column shows a value: a field's area, or one row of a list column
+ * (its header row aside), with the value there now.
+ */
+interface ValueArea {
+  key: string;
+  rect: Rect;
+  value: string;
+  align: "left" | "right" | "center";
+  area: WholeValue & ImageValue;
+  spec: CellSpec | null;
+  /** The area's template; every row of a list column shares it. */
+  template: string;
+  /** Shared by the rows of a list column. */
+  group: string;
+}
+
+function valueAreas(layout: BoardLayout, values: Record<string, string>, records: Row[], page: number): ValueArea[] {
+  const out: ValueArea[] = [];
+  for (const field of layout.fields ?? []) {
+    const rect = parseArea(field.area ?? "");
+    if (!rect) continue;
+    out.push({
+      key: `field:${field.id}`,
+      rect,
+      value: values[field.id] ?? "",
+      align: field.align ?? "left",
+      area: field,
+      spec: resolveCell(layout.cell, field.cell),
+      template: typeof field.text === "string" ? field.text : "",
+      group: `field:${field.id}`,
+    });
+  }
+  for (const list of layout.lists ?? []) {
+    const rect = parseArea(list.area ?? "");
+    if (!rect || !Array.isArray(list.columns)) continue;
+    const spans = columnSpans(list.columns, rect);
+    const rows = pageOfRecords(list, rect, records, page);
+    list.columns.forEach((column, j) => {
+      if (!column || spans[j].x2 < spans[j].x1) return;
+      const template = String(column.text ?? "");
+      const spec = resolveCell(layout.cell, column.cell);
+      rows.forEach((record, i) => {
+        const y = rect.y1 + (list.header ? 1 : 0) + i;
+        out.push({
+          key: `list:${list.id}:${j}:${y}`,
+          rect: { x1: spans[j].x1, x2: spans[j].x2, y1: y, y2: y },
+          value: record ? renderTemplate(template, record) : "",
+          align: column.align ?? "left",
+          area: column,
+          spec,
+          template,
+          group: `list:${list.id}:${j}`,
+        });
+      });
+    });
+  }
+  return out;
+}
+
+/** One long split-flap showing a whole value or an image: a field, or one record of a list column. */
 export interface WholeValueFlap {
   key: string;
   rect: Rect;
-  /** The value to show. */
+  /** The value to show: words, or an image's source (see imageSource); "" for the blank. */
   value: string;
   align: "left" | "right" | "center";
   spec: CellSpec;
+  /** Faces are images rather than words. */
+  image: boolean;
+  fit: "contain" | "cover" | "fill";
   /** Which drum it shares: every row of a list column turns the same faces. A new template is a new drum. */
   drumKey: string;
-  /** Faces given in the layout, in order (see WholeValue). */
+  /** Faces given in the layout, in order (see WholeValue). Images have none. */
   drum: string[];
   /** Every value the area has across all the records, which the drum needs a face for. */
   values: string[];
@@ -348,70 +423,64 @@ export interface WholeValueFlap {
 
 /** The whole-value flaps on the board, with what each shows now. */
 export function wholeValueFlaps(layout: BoardLayout, values: Record<string, string>, records: Row[] = [], page = 0): WholeValueFlap[] {
-  const flaps: WholeValueFlap[] = [];
-  const drumOf = (area: WholeValue) => (Array.isArray(area.drum) ? area.drum.filter((f) => typeof f === "string") : []);
-  const valuesOf = (template: string) => [...new Set(records.map((r) => renderTemplate(template, r)))];
+  const allValues = new Map<string, string[]>();
+  const valuesOf = (template: string) => {
+    if (!allValues.has(template)) allValues.set(template, [...new Set(records.map((r) => renderTemplate(template, r)))]);
+    return allValues.get(template)!;
+  };
 
-  for (const field of layout.fields ?? []) {
-    const spec = resolveCell(layout.cell, field.cell);
-    const rect = parseArea(field.area ?? "");
-    if (!rect || !spec || !isWholeValue(field, spec)) continue;
-    const value = values[field.id] ?? "";
-    const template = typeof field.text === "string" ? field.text : "";
-    flaps.push({
-      key: `field:${field.id}`,
-      rect,
-      value,
-      align: field.align ?? "left",
-      spec,
-      drumKey: `field:${field.id}|${template}`,
-      drum: drumOf(field),
-      values: [...new Set([value, ...(template.includes("{") ? valuesOf(template) : [])])],
-    });
-  }
+  return valueAreas(layout, values, records, page).flatMap((a): WholeValueFlap[] => {
+    if (!a.spec || !isWholeValue(a.area, a.spec)) return [];
+    const image = a.area.image === true;
+    // A field reads one record, but its drum still needs every value the template gives.
+    const seen = [a.value, ...(a.template.includes("{") ? valuesOf(a.template) : [])];
+    const asFace = (v: string) => (image ? (imageSource(v) ?? "") : v);
+    return [
+      {
+        key: a.key,
+        rect: a.rect,
+        value: asFace(a.value),
+        align: a.align,
+        spec: a.spec,
+        image,
+        fit: a.area.fit ?? "contain",
+        drumKey: `${a.group}|${image ? "image" : "text"}|${a.template}`,
+        drum: !image && Array.isArray(a.area.drum) ? a.area.drum.filter((f) => typeof f === "string") : [],
+        values: [...new Set(seen.map(asFace))],
+      },
+    ];
+  });
+}
 
-  for (const list of layout.lists ?? []) {
-    const rect = parseArea(list.area ?? "");
-    if (!rect || !Array.isArray(list.columns)) continue;
-    const spans = columnSpans(list.columns, rect);
-    const rows = pageOfRecords(list, rect, records, page);
-    list.columns.forEach((column, j) => {
-      const spec = resolveCell(layout.cell, column?.cell);
-      if (!spec || !isWholeValue(column, spec) || spans[j].x2 < spans[j].x1) return;
-      const template = String(column.text ?? "");
-      const all = valuesOf(template);
-      let y = rect.y1 + (list.header ? 1 : 0);
-      for (const record of rows) {
-        flaps.push({
-          key: `list:${list.id}:${j}:${y}`,
-          rect: { x1: spans[j].x1, x2: spans[j].x2, y1: y, y2: y },
-          value: record ? renderTemplate(template, record) : "",
-          align: column.align ?? "left",
-          spec,
-          drumKey: `list:${list.id}:${j}|${template}`,
-          drum: drumOf(column),
-          values: all,
-        });
-        y++;
-      }
-    });
-  }
+/** An image drawn plainly over a field's area or a list row's column: images on anything but split-flap. */
+export interface ImageArea {
+  key: string;
+  rect: Rect;
+  /** What an <img> loads; null when the value is not an image, leaving the space bare. */
+  src: string | null;
+  fit: "contain" | "cover" | "fill";
+}
 
-  return flaps;
+export function imageAreas(layout: BoardLayout, values: Record<string, string>, records: Row[] = [], page = 0): ImageArea[] {
+  return valueAreas(layout, values, records, page)
+    .filter((a) => isPlainImage(a.area, a.spec))
+    .map((a) => ({ key: a.key, rect: a.rect, src: imageSource(a.value), fit: a.area.fit ?? "contain" }));
 }
 
 /**
  * The faces on a whole-value drum, in the order they come round: a blank, the faces the layout
  * gives in its order, then the other values alphabetically. A value that matches a given face
- * apart from capitals does not get a face of its own: it shows that one (see faceFor).
+ * apart from capitals does not get a face of its own: it shows that one (see faceFor). Images'
+ * sources are compared exactly, capitals and all.
  */
-export function drumFaces(given: string[], values: Iterable<string>): string[] {
+export function drumFaces(given: string[], values: Iterable<string>, exact = false): string[] {
+  const same = (f: string) => (exact ? f : f.toLowerCase());
   const faces = [""];
   const known = new Set<string>([""]);
   const add = (f: string) => {
-    if (known.has(f.toLowerCase())) return;
+    if (known.has(same(f))) return;
     faces.push(f);
-    known.add(f.toLowerCase());
+    known.add(same(f));
   };
   given.forEach(add);
   [...new Set(values)].sort((a, b) => a.localeCompare(b)).forEach(add);
@@ -419,9 +488,9 @@ export function drumFaces(given: string[], values: Iterable<string>): string[] {
 }
 
 /** The face that shows a value: its own, or one that matches it apart from capitals; else the blank. */
-export function faceFor(value: string, faces: string[]): number {
-  const exact = faces.indexOf(value);
-  if (exact >= 0) return exact;
+export function faceFor(value: string, faces: string[], exact = false): number {
+  const own = faces.indexOf(value);
+  if (own >= 0 || exact) return Math.max(0, own);
   const lower = value.toLowerCase();
   return Math.max(0, faces.findIndex((f) => f.toLowerCase() === lower));
 }

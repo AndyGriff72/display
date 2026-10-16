@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { faceFor } from "../../board/compose";
 import { flapShades } from "./SplitFlapCell";
 import "./SplitFlapCell.css";
@@ -20,6 +20,10 @@ export interface WholeValueFlapProps {
   background?: string;
   flipMs?: number;
   align?: "left" | "right" | "center";
+  /** Faces are images' sources (see imageSource), drawn to fit the flap, rather than words. */
+  images?: boolean;
+  /** How each image fills the flap. */
+  fit?: "contain" | "cover" | "fill";
   onFlap?: () => void;
   style?: CSSProperties;
 }
@@ -27,7 +31,7 @@ export interface WholeValueFlapProps {
 const FALLBACK_FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 
 /**
- * One long split-flap with a whole value printed on each face, like the status flaps on station
+ * One long split-flap with a whole value, or an image, printed on each face, like the status flaps on station
  * boards. It turns exactly as a character cell does: forward through every face in between,
  * one flap at a time, until the one asked for comes round.
  *
@@ -46,14 +50,16 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   background,
   flipMs = 80,
   align = "left",
+  images = false,
+  fit = "contain",
   onFlap,
   style,
 }: WholeValueFlapProps) {
   // Starts on the blank, as a board does when it is switched on.
   const [shown, setShown] = useState("");
   const [flipping, setFlipping] = useState(false);
-  const target = faceFor(value, faces);
-  const at = faceFor(shown, faces);
+  const target = faceFor(value, faces, images);
+  const at = faceFor(shown, faces, images);
   const nextIndex = (at + 1) % faces.length;
 
   const onFlapRef = useRef(onFlap);
@@ -84,14 +90,12 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   }, [flipping, flipMs]);
 
   const padding = Math.round(cellWidth * 0.25);
-  const sizes = useFittedSizes(faces, fontFamily, Math.round(cellHeight * 0.7), width - 2 * padding);
+  const sizes = useFittedSizes(images ? [] : faces, fontFamily, Math.round(cellHeight * 0.7), width - 2 * padding);
   const current = faces[at] ?? "";
   const coming = flipping ? next : current;
-  const glyph = (face: string): CSSProperties => ({
-    fontSize: sizes.get(face),
-    textAlign: align,
-    padding: `0 ${padding}px`,
-  });
+  const glyph = (face: string): CSSProperties =>
+    images ? { padding: Math.round(cellHeight * 0.08) } : { fontSize: sizes.get(face), textAlign: align, padding: `0 ${padding}px` };
+  const draw = (face: string) => (images ? face && <img src={face} alt="" style={{ objectFit: fit }} /> : face);
 
   const vars = {
     "--sf-w": `${width}px`,
@@ -105,20 +109,20 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   } as CSSProperties;
 
   return (
-    <div className="sf-cell sf-whole" style={vars} aria-label={current}>
-      <Half pos="top" face={coming} style={glyph(coming)} />
-      <Half pos="bottom" face={current} style={glyph(current)} />
+    <div className={`sf-cell sf-whole${images ? " sf-images" : ""}`} style={vars} aria-label={images ? (current ? "image" : "") : current}>
+      <Half pos="top" face={draw(coming)} style={glyph(coming)} />
+      <Half pos="bottom" face={draw(current)} style={glyph(current)} />
       {flipping && (
         <span key={current} className="sf-flaps">
-          <Half pos="top" face={current} style={glyph(current)} flap />
-          <Half pos="bottom" face={coming} style={glyph(coming)} flap />
+          <Half pos="top" face={draw(current)} style={glyph(current)} flap />
+          <Half pos="bottom" face={draw(coming)} style={glyph(coming)} flap />
         </span>
       )}
     </div>
   );
 });
 
-function Half({ pos, face, style, flap }: { pos: "top" | "bottom"; face: string; style: CSSProperties; flap?: boolean }) {
+function Half({ pos, face, style, flap }: { pos: "top" | "bottom"; face: ReactNode; style: CSSProperties; flap?: boolean }) {
   return (
     <span className={`sf-half sf-${pos}${flap ? " sf-flap" : ""}`} aria-hidden>
       <span className="sf-glyph" style={style}>

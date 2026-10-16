@@ -934,3 +934,11 @@ code.chip {
 .whole-value textarea {
   text-transform: none;
 }
+
+/* An image in the data source preview: small, so the table stays readable. */
+.preview-image {
+  display: block;
+  max-width: 120px;
+  max-height: 48px;
+  object-fit: contain;
+}

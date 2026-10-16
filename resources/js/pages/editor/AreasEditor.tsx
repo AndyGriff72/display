@@ -1,4 +1,5 @@
-import { columnOffsets, parseArea, type CellType, type FieldArea, type Finish, type ListArea, type ListColumn, type TextStyle, type WholeValue } from "../../board/layout";
+import { columnOffsets, parseArea, type CellType, type FieldArea, type Finish, type ListArea, type ListColumn, type ImageValue, type TextStyle, type WholeValue } from "../../board/layout";
+import { imageSource } from "../../board/images";
 import { OptionalColour } from "../StaticAreasPanel";
 import { CellStyle, withCell } from "./CellStyle";
 import { PositionFields, formatArea } from "./PositionFields";
@@ -122,10 +123,11 @@ export function AreasEditor(props: AreasEditorProps) {
                   />
                 </label>
               )}
-              <span className="hint">now: {props.showing[f.id] ? `"${props.showing[f.id]}"` : "nothing"}</span>
+              <span className="hint">now: {showingNow(props.showing[f.id])}</span>
             </div>
             <CellStyle cell={f.cell} {...style} onChange={(cell) => onChange({ fields: fields.map((x, j) => (j === i ? withCell(x, cell) : x)), lists })} />
-            {(f.cell?.type ?? props.boardType) === "splitflap" && <WholeValueOption area={f} onChange={(patch) => setField(i, patch)} />}
+            <ImageOption area={f} onChange={(patch) => setField(i, patch)} />
+            {(f.cell?.type ?? props.boardType) === "splitflap" && !f.image && <WholeValueOption area={f} onChange={(patch) => setField(i, patch)} />}
           </div>
         );
       })}
@@ -212,7 +214,10 @@ export function AreasEditor(props: AreasEditorProps) {
                     {...style}
                     onChange={(cell) => setList(l, { columns: cols.map((x, k) => (k === c ? withCell(x, cell) : x)) })}
                   />
-                  {(col.cell?.type ?? props.boardType) === "splitflap" && <WholeValueOption area={col} onChange={(patch) => setColumn(l, c, patch)} />}
+                  <ImageOption area={col} onChange={(patch) => setColumn(l, c, patch)} />
+                  {(col.cell?.type ?? props.boardType) === "splitflap" && !col.image && (
+                    <WholeValueOption area={col} onChange={(patch) => setColumn(l, c, patch)} />
+                  )}
                 </div>
               ))}
               <button onClick={() => setList(l, { columns: [...cols, { title: "", text: "" }] })}>+ Add a column</button>
@@ -221,6 +226,42 @@ export function AreasEditor(props: AreasEditorProps) {
         );
       })}
       <button onClick={addList}>+ Add a list</button>
+    </div>
+  );
+}
+
+/** What a field shows now, in a few words: an image's source is far too long to print. */
+function showingNow(value: string | undefined): string {
+  if (!value) return "nothing";
+  return imageSource(value) ? "an image" : `"${value}"`;
+}
+
+const FITS: { value: NonNullable<ImageValue["fit"]>; label: string }[] = [
+  { value: "contain", label: "Whole image" },
+  { value: "cover", label: "Fill, cropping" },
+  { value: "fill", label: "Stretch to fill" },
+];
+
+/**
+ * Show the value as an image: on split-flap, one long flap with an image on each face; on
+ * anything else, the image drawn plainly in the space.
+ */
+function ImageOption({ area, onChange }: { area: ImageValue; onChange: (patch: ImageValue) => void }) {
+  return (
+    <div className="row-editor">
+      <label className="inline" title="For data holding images. On split-flap, each image is a face on one long flap; on other displays, the image is drawn in the space.">
+        <input type="checkbox" checked={!!area.image} onChange={(e) => onChange({ image: e.target.checked || undefined, fit: e.target.checked ? area.fit : undefined })} />
+        Show as image
+      </label>
+      {area.image && (
+        <select value={area.fit ?? "contain"} onChange={(e) => onChange({ fit: e.target.value === "contain" ? undefined : (e.target.value as ImageValue["fit"]) })} aria-label="Fit">
+          {FITS.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }
@@ -257,11 +298,11 @@ function WholeValueOption({ area, onChange }: { area: WholeValue; onChange: (pat
 
 /** Leave out settings that are back at their defaults, rather than saving them empty. */
 function tidyField(f: FieldArea): FieldArea {
-  return tidyKeys(f, ["align", "row", "merged", "drum"]);
+  return tidyKeys(f, ["align", "row", "merged", "drum", "image", "fit"]);
 }
 
 function tidyColumn(c: ListColumn): ListColumn {
-  return tidyKeys(c, ["x", "width", "align", "merged", "drum"]);
+  return tidyKeys(c, ["x", "width", "align", "merged", "drum", "image", "fit"]);
 }
 
 function tidyKeys<T extends object>(area: T, keys: string[]): T {

@@ -114,11 +114,11 @@ class DataSourceQuery
 
         return [
             'columns' => $names,
-            'rows' => $rows->map(function ($row) use ($names) {
+            'rows' => BinaryValues::prepare($rows->map(function ($row) use ($names) {
                 $values = array_values((array) $row);
 
                 return array_combine($names, $values);
-            })->values()->all(),
+            })->values()->all()),
         ];
     }
 
@@ -342,7 +342,7 @@ class DataSourceQuery
 
         return [
             'columns' => $columns,
-            'rows' => array_map(fn ($row) => array_combine($columns, $row), $rows),
+            'rows' => BinaryValues::prepare(array_map(fn ($row) => array_combine($columns, $row), $rows)),
         ];
     }
 }
