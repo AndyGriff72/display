@@ -1,7 +1,8 @@
 /**
  * Typefaces offered for the glyphs. The Google ones are all under the SIL Open Font
  * Licence, so they are free to use and to bundle later if the board needs to run offline.
- * Bedstead is bundled already (resources/fonts), being in the public domain.
+ * Bedstead (in the public domain) and Flapline (designed for this project) are bundled with
+ * the app, in resources/fonts.
  *
  * Each loads its bold and italic too, where the face has them, so text set bold or italic uses
  * the designed letters rather than ones the browser thickens or slants itself.
@@ -22,6 +23,8 @@ export const FONTS: FontOption[] = [
   { id: "oswald", label: "Oswald", family: '"Oswald", sans-serif', google: "Oswald:wght@500;700" },
   { id: "bebas-neue", label: "Bebas Neue", family: '"Bebas Neue", sans-serif', google: "Bebas+Neue" },
   { id: "share-tech-mono", label: "Share Tech Mono", family: '"Share Tech Mono", monospace', google: "Share+Tech+Mono" },
+  // Bundled with the app: see Board.css and resources/fonts.
+  { id: "flapline", label: "Flapline (split-flap)", family: '"Flapline", "Helvetica Neue", Arial, sans-serif' },
   { id: "ibm-plex-mono", label: "IBM Plex Mono", family: '"IBM Plex Mono", monospace', google: "IBM+Plex+Mono:ital,wght@0,500;0,700;1,500;1,700" },
   // Plainer faces, for areas drawn as text.
   { id: "inter", label: "Inter", family: '"Inter", sans-serif', google: "Inter:ital,wght@0,400;0,600;0,700;1,400;1,700" },

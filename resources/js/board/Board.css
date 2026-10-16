@@ -9,6 +9,16 @@
   font-display: swap;
 }
 
+/*
+ * Flapline: condensed monospaced capitals in the style of 1970s-80s split-flap departure boards,
+ * designed for this project. Regular only; the split-flap's weight of 500 uses it as it is.
+ */
+@font-face {
+  font-family: "Flapline";
+  src: url("../../fonts/Flapline-Regular.woff") format("woff"), url("../../fonts/Flapline-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
 .board {
   --board-bg: #0c0c0d;
 
