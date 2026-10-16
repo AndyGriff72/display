@@ -13,6 +13,7 @@ import {
   validateLayout,
   type BoardLayout,
   type CellType,
+  type FlapTiming,
   type Finish,
   type TextStyle,
 } from "../board/layout";
@@ -59,6 +60,7 @@ const TABS = [
 type Tab = (typeof TABS)[number]["id"];
 
 const playFlap = () => flapSound.play();
+const playBeat = (landed: number, dueAt: number) => flapSound.beat(landed, dueAt);
 const playDotFlips = (delaysMs: number[]) => flapSound.dotFlips(delaysMs);
 
 /** What is compared to tell whether a board has unsaved changes. */
@@ -108,6 +110,7 @@ export default function BoardEditorPage() {
   const [gapX, setGapX] = useState<number | undefined>(undefined);
   const [gapY, setGapY] = useState<number | undefined>(undefined);
   const [flipMs, setFlipMs] = useState(80);
+  const [flapTiming, setFlapTiming] = useState<FlapTiming>("together");
   const [fontId, setFontId] = useState(FONTS[0].id);
   const [stackName, setStackName] = useState<CharsetName>("standard");
   // Saved with the board: whether it makes the flap sound, here and on screens.
@@ -195,6 +198,7 @@ export default function BoardEditorPage() {
         fontFamily: font.family,
         stack: CHARSETS[stackName],
         flipMs,
+        ...(flapTiming !== "together" ? { flapTiming } : {}),
         segments,
         ...(finish !== "led" ? { finish } : {}),
         ...(cellType === "text"
@@ -210,7 +214,7 @@ export default function BoardEditorPage() {
           : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -243,6 +247,7 @@ export default function BoardEditorPage() {
     setGapX(cell.gapX);
     setGapY(cell.gapY);
     setFlipMs(cell.flipMs ?? 80);
+    setFlapTiming(cell.flapTiming ?? "together");
     setFontId(FONTS.find((f) => f.family === cell.fontFamily)?.id ?? FONTS[0].id);
     setStackName(
       (Object.keys(CHARSETS) as CharsetName[]).find((k) => cell.stack !== undefined && CHARSETS[k] === normalizeStack(cell.stack)) ??
@@ -440,7 +445,7 @@ export default function BoardEditorPage() {
         {boardNotice && <p className={"notice " + boardNotice.kind}>{boardNotice.text}</p>}
 
         <FitToWidth>
-          <Board layout={layout} values={boardValues} records={records} page={page} onFlap={playFlap} onDotFlips={playDotFlips} showAreas={showAreas} />
+          <Board layout={layout} values={boardValues} records={records} page={page} onBeat={playBeat} onFlap={playFlap} onDotFlips={playDotFlips} showAreas={showAreas} />
         </FitToWidth>
 
         <div className="preview-tools">
@@ -597,6 +602,13 @@ export default function BoardEditorPage() {
                         </select>
                       </label>
                       <Slider label="Flip time" unit="ms" value={flipMs} min={30} max={400} step={10} onChange={setFlipMs} />
+                      <label title="Station and airport boards move every flap on one beat, so a change clatters in rhythm">
+                        Flaps move
+                        <select value={flapTiming} onChange={(e) => setFlapTiming(e.target.value as FlapTiming)}>
+                          <option value="together">Together, on one beat (like station boards)</option>
+                          <option value="independent">Each in its own time</option>
+                        </select>
+                      </label>
                     </>
                   )}
                   <label className="check" title="Positions outside every field, list and static area, including gaps between list columns">

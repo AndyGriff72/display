@@ -1,8 +1,10 @@
 /**
- * The sound a flap makes when it lands. One shared player for the whole board: a board of
- * a few hundred cells can land thousands of flaps a second, and playing every one of them
- * would be both deafening and expensive, so landings closer together than MIN_GAP_MS are
- * dropped. What is left still reads as the clatter of a whole board settling.
+ * The sound a flap makes when it lands. One shared player for the whole board.
+ *
+ * Flaps usually fall together on the board's beat (see FlapClock), and each beat is one sound,
+ * fuller the more flaps land on it (see beat). When flaps keep their own time instead, a board
+ * of a few hundred cells can land thousands a second, and playing every one would be both
+ * deafening and expensive, so landings closer together than MIN_GAP_MS are dropped (see play).
  *
  * The default is a recording of a real mechanism (resources/wav/split-flap.wav). The
  * synthesised styles in clickSynth.ts remain as alternatives.
@@ -160,7 +162,7 @@ class FlapSound {
     return this.recordingLoad;
   }
 
-  private voice(ctx: AudioContext, at?: number): void {
+  private voice(ctx: AudioContext, at?: number, gain = 1): void {
     const recorded = this.style === "recorded" && this.recording !== null;
     const buffer = recorded ? this.recording : this.synthesised[Math.floor(Math.random() * this.synthesised.length)];
     if (!buffer) return;
@@ -172,7 +174,7 @@ class FlapSound {
     source.playbackRate.value = rate.from + Math.random() * rate.spread;
     // Nor land quite as hard: a recording played identically every time sounds like one.
     const level = ctx.createGain();
-    level.gain.value = recorded ? 0.8 + Math.random() * 0.2 : 1;
+    level.gain.value = (recorded ? 0.8 + Math.random() * 0.2 : 1) * gain;
     source.connect(level).connect(this.output!);
     source.start(at);
   }
@@ -229,6 +231,22 @@ class FlapSound {
     }
   }
 
+  /**
+   * A beat of the board's clock (see FlapClock): one sound for all the flaps that landed on it,
+   * fuller the more there are. Beats are never dropped: they are what makes the rhythm.
+   *
+   * @param dueAt when the beat was due, in Date.now() time: its sound is played at exactly
+   *   that moment plus BEAT_LATENCY, however late the browser ran the beat
+   */
+  beat(landed: number, dueAt = Date.now()): void {
+    const ctx = this.ctx;
+    if (!this.enabled || !ctx || !this.output || ctx.state !== "running") return;
+    const { gain, voices } = beatVoices(landed);
+    const at = Math.max(ctx.currentTime, ctx.currentTime + BEAT_LATENCY + (dueAt - Date.now()) / 1000);
+    for (let i = 0; i < voices; i++) this.voice(ctx, at + (i === 0 ? 0 : Math.random() * BEAT_SPREAD), gain);
+  }
+
+  /** One flap landing, when flaps keep their own time. */
   play(): void {
     const ctx = this.ctx;
     if (!this.enabled || !ctx || !this.output || ctx.state !== "running") return;
@@ -241,6 +259,32 @@ class FlapSound {
     this.voice(ctx);
   }
 }
+
+/**
+ * How a beat of `landed` flaps sounds: how loud, and how many flaps to play for it. A lone flap
+ * is a single quiet click; a whole row landing together is a fuller, louder "clack", made of a
+ * few flaps a few milliseconds apart, as many mechanisms never land at exactly the same instant.
+ * Exported for the tests.
+ */
+export function beatVoices(landed: number): { gain: number; voices: number } {
+  if (landed <= 0) return { gain: 0, voices: 0 };
+  const fullness = Math.min(1, Math.log2(landed) / Math.log2(BEAT_FULL));
+  const voices = landed === 1 ? 1 : landed < 6 ? 2 : 3;
+  // Louder with more flaps, the voices sharing it between them.
+  return { gain: (0.55 + 0.45 * fullness) / Math.sqrt(voices), voices };
+}
+
+/** How many flaps landing on one beat sound as loud as a board can. */
+const BEAT_FULL = 32;
+
+/**
+ * How far behind its beat each beat's sound plays, in seconds: enough that a timer the browser
+ * ran late can still be put back exactly on the beat, so the rhythm stays steady.
+ */
+const BEAT_LATENCY = 0.04;
+
+/** The spread of the flaps in one beat, in seconds. */
+const BEAT_SPREAD = 0.008;
 
 /** One variant of a synthesised click (see clickSynth.ts), ready to play. */
 function synthesiseClick(ctx: AudioContext, style: SynthStyle): AudioBuffer {

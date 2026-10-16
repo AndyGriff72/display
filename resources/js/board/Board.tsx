@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { FlapClock } from "../cells/splitflap/flapClock";
 import { DotMatrixCell } from "../cells/dotmatrix/DotMatrixCell";
 import { FlipDotCell } from "../cells/flipdot/FlipDotCell";
 import { SegmentCell } from "../cells/segment/SegmentCell";
@@ -30,7 +31,12 @@ export interface BoardProps {
   records?: Row[];
   /** Which page of records lists show; see pageOffset. */
   page?: number;
-  /** Called each time a flap lands anywhere on the board. */
+  /**
+   * Called on each beat that split-flaps land on, with how many landed together, and when the
+   * beat was due in Date.now() time (see FlapClock).
+   */
+  onBeat?: (landed: number, dueAt: number) => void;
+  /** When the board's flaps keep their own time (flapTiming "independent"): called each time one lands. */
   onFlap?: () => void;
   /** Called when flip-dot discs turn, with the delay in milliseconds of each column that turns. */
   onDotFlips?: (delaysMs: number[]) => void;
@@ -43,7 +49,7 @@ export interface BoardProps {
  * areas laid over it. Everything is placed on the same CSS grid, so an area covers the gaps
  * between the cells it replaces and the board keeps its shape around it.
  */
-export function Board({ layout, values, records = [], page = 0, onFlap, onDotFlips, showAreas }: BoardProps) {
+export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, onDotFlips, showAreas }: BoardProps) {
   const { cell } = layout;
   const specs = useMemo(() => cellSpecs(layout), [layout]);
   const cells = useMemo(() => composeBoard(layout, values, records, page), [layout, values, records, page]);
@@ -51,6 +57,7 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
   const statics = useMemo(() => placedAreas(layout, layout.statics ?? []), [layout]);
   const flaps = useMemo(() => wholeValueFlaps(layout, values, records, page), [layout, values, records, page]);
   const drums = useDrums(flaps);
+  const clockFor = useFlapClocks(layout.cell.flapTiming !== "independent", onBeat);
   const images = useMemo(() => imageAreas(layout, values, records, page), [layout, values, records, page]);
   const fields = useMemo(
     () => (showAreas ? placedAreas(layout, [...(layout.fields ?? []), ...(layout.lists ?? [])]) : []),
@@ -102,6 +109,7 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
                 fontFamily={spec.fontFamily}
                 stack={spec.stack}
                 flipMs={spec.flipMs}
+                clock={clockFor(spec.flipMs)}
                 background={spec.background}
                 onFlap={onFlap}
               />
@@ -124,6 +132,7 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
             color={f.spec.color}
             background={f.spec.background}
             flipMs={f.spec.flipMs}
+            clock={clockFor(f.spec.flipMs)}
             align={f.align}
             images={f.image}
             fit={f.fit}
@@ -164,6 +173,33 @@ export function Board({ layout, values, records = [], page = 0, onFlap, onDotFli
     </div>
   );
 }
+
+/**
+ * The board's beats: one clock for each flip time its split-flaps use (an area can have its own),
+ * so all the flaps that fall at one speed fall together. Kept for as long as the board is up,
+ * and stopped when it goes. Returns undefined for every flip time when flaps keep their own time.
+ */
+function useFlapClocks(together: boolean, onBeat?: (landed: number, dueAt: number) => void): (flipMs?: number) => FlapClock | undefined {
+  const clocks = useRef(new Map<number, FlapClock>());
+  const onBeatRef = useRef(onBeat);
+  onBeatRef.current = onBeat;
+  useEffect(() => {
+    const all = clocks.current;
+    // Stopped, but kept: a cell that mounts again (React's strict mode does this) joins the same one.
+    return () => {
+      for (const clock of all.values()) clock.stop();
+    };
+  }, []);
+  return (flipMs = DEFAULT_FLIP_MS) => {
+    if (!together) return undefined;
+    let clock = clocks.current.get(flipMs);
+    if (!clock) clocks.current.set(flipMs, (clock = new FlapClock(flipMs, (landed, dueAt) => onBeatRef.current?.(landed, dueAt))));
+    return clock;
+  };
+}
+
+/** As SplitFlapCell's own default. */
+const DEFAULT_FLIP_MS = 80;
 
 /**
  * The faces on each whole-value drum, by drum. A drum only ever gains faces while the board is

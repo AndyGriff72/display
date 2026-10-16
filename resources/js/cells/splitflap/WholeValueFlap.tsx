@@ -1,6 +1,8 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { faceFor } from "../../board/compose";
+import type { FlapClock } from "./flapClock";
 import { flapShades } from "./SplitFlapCell";
+import { useFlapMotion } from "./useFlapMotion";
 import "./SplitFlapCell.css";
 
 export interface WholeValueFlapProps {
@@ -24,6 +26,9 @@ export interface WholeValueFlapProps {
   images?: boolean;
   /** How each image fills the flap. */
   fit?: "contain" | "cover" | "fill";
+  /** The board's beat (see FlapClock). Without one, the flap keeps its own time. */
+  clock?: FlapClock;
+  /** Without a clock: called each time a flap lands. */
   onFlap?: () => void;
   style?: CSSProperties;
 }
@@ -52,47 +57,19 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   align = "left",
   images = false,
   fit = "contain",
+  clock,
   onFlap,
   style,
 }: WholeValueFlapProps) {
-  // Starts on the blank, as a board does when it is switched on.
-  const [shown, setShown] = useState("");
-  const [flipping, setFlipping] = useState(false);
-  const target = faceFor(value, faces, images);
-  const at = faceFor(shown, faces, images);
-  const nextIndex = (at + 1) % faces.length;
-
-  const onFlapRef = useRef(onFlap);
-  onFlapRef.current = onFlap;
-
-  useLayoutEffect(() => {
-    if (flipping || at === target) return;
-    // A hidden tab throttles timers; nobody is watching, so settle (as SplitFlapCell does).
-    if (document.hidden) {
-      setShown(faces[target]);
-      return;
-    }
-    setFlipping(true);
-  }, [flipping, at, target, faces]);
-
-  // A flap already falling always finishes, even if the value changes under it.
-  const next = faces[nextIndex] ?? "";
-  useEffect(() => {
-    if (!flipping) return;
-    const timer = window.setTimeout(() => {
-      setShown(next);
-      setFlipping(false);
-      onFlapRef.current?.();
-    }, flipMs);
-    return () => window.clearTimeout(timer);
-    // `next` is read when the flip starts; a drum growing mid-flip must not restart it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flipping, flipMs]);
+  const target = faces[faceFor(value, faces, images)] ?? "";
+  const nextOf = useCallback((face: string) => faces[(faceFor(face, faces, images) + 1) % faces.length] ?? "", [faces, images]);
+  const motion = useFlapMotion("", target, nextOf, flipMs, clock, onFlap);
 
   const padding = Math.round(cellWidth * 0.25);
   const sizes = useFittedSizes(images ? [] : faces, fontFamily, Math.round(cellHeight * 0.7), width - 2 * padding);
-  const current = faces[at] ?? "";
-  const coming = flipping ? next : current;
+  const current = faces[faceFor(motion.shown, faces, images)] ?? "";
+  const flipping = motion.flipping;
+  const coming = flipping ? motion.next : current;
   const glyph = (face: string): CSSProperties =>
     images ? { padding: Math.round(cellHeight * 0.08) } : { fontSize: sizes.get(face), textAlign: align, padding: `0 ${padding}px` };
   const draw = (face: string) => (images ? face && <img src={face} alt="" style={{ objectFit: fit }} /> : face);

@@ -86,6 +86,9 @@ export interface AreaCell extends TextStyle {
   background?: string;
 }
 
+export const FLAP_TIMINGS = ["together", "independent"] as const;
+export type FlapTiming = (typeof FLAP_TIMINGS)[number];
+
 /** How every cell on the board looks. Settings that do not apply to the cell type are ignored. */
 export interface CellSettings extends TextStyle {
   type: CellType;
@@ -103,6 +106,11 @@ export interface CellSettings extends TextStyle {
   stack?: string;
   /** Split-flap: how long one flap takes to fall, in milliseconds. */
   flipMs?: number;
+  /**
+   * Split-flap: "together" (the default) moves every flap on one beat, as Solari boards do, so a
+   * change clatters in unison; "independent" lets each cell keep its own time.
+   */
+  flapTiming?: FlapTiming;
   /** Segment: 7 for digits, 14 for text. */
   segments?: 7 | 14;
   /** Dot matrix and segment: LED (the default), VFD, or lightbulbs (dot matrix only). */
@@ -342,6 +350,9 @@ export function validateLayout(layout: BoardLayout): string[] {
   }
   errors.push(...finishProblems("The board's cells", cell?.finish, cell?.type));
   errors.push(...textStyleProblems("The board's cells", cell ?? {}));
+  if (cell?.flapTiming !== undefined && !FLAP_TIMINGS.includes(cell.flapTiming)) {
+    errors.push(`The board's cells: flapTiming must be one of ${FLAP_TIMINGS.map((t) => `"${t}"`).join(", ")}.`);
+  }
 
   if (layout.pageSeconds !== undefined && !(typeof layout.pageSeconds === "number" && layout.pageSeconds >= 0)) {
     errors.push("pageSeconds must be a number of seconds, or 0 to stay on the first page.");

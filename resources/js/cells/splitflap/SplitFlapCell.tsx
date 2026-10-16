@@ -1,7 +1,9 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, type CSSProperties } from "react";
 import { CHARSETS } from "../charsets";
 import type { CellProps } from "../types";
+import type { FlapClock } from "./flapClock";
 import { flapIndex, nextFlap, normalizeStack } from "./flapStack";
+import { useFlapMotion } from "./useFlapMotion";
 import "./SplitFlapCell.css";
 
 export interface SplitFlapCellProps extends CellProps {
@@ -9,7 +11,9 @@ export interface SplitFlapCellProps extends CellProps {
   stack?: string;
   /** How long one flap takes to fall, in milliseconds. */
   flipMs?: number;
-  /** Called each time a flap lands, e.g. to play the click. */
+  /** The board's beat, which every flap falls on (see FlapClock). Without one, the cell keeps its own time. */
+  clock?: FlapClock;
+  /** Without a clock: called each time a flap lands, e.g. to play the click. */
   onFlap?: () => void;
   /** The flaps' colour, instead of the usual near-black. Any CSS colour. */
   background?: string;
@@ -28,48 +32,16 @@ export const SplitFlapCell = memo(function SplitFlapCell({
   color,
   stack: givenStack = CHARSETS.standard,
   flipMs = 80,
+  clock,
   onFlap,
   background,
   className,
   style,
 }: SplitFlapCellProps) {
   const stack = normalizeStack(givenStack);
-  const target = flapIndex(char, stack);
-  // Starts on the blank, as a board does when it is switched on.
-  const [shown, setShown] = useState(0);
-  const [flipping, setFlipping] = useState(false);
-
-  // Read the latest callback when a flap lands without restarting the flip timer every render.
-  const onFlapRef = useRef(onFlap);
-  onFlapRef.current = onFlap;
-
-  // Start the next flap. A layout effect, so the cell never paints a frame standing still
-  // between two flips of the same run.
-  useLayoutEffect(() => {
-    if (flipping || shown === target) return;
-    // A hidden tab throttles timers to about once a second, which would leave the board
-    // crawling through its stack long after the tab is back. Nobody is watching, so settle.
-    if (document.hidden) {
-      setShown(target);
-      return;
-    }
-    setFlipping(true);
-  }, [flipping, shown, target]);
-
-  // Land the flap once it has fallen. A flap already falling always finishes, even if the
-  // target changes under it, just as the mechanism would.
-  useEffect(() => {
-    if (!flipping) return;
-    const timer = window.setTimeout(() => {
-      setShown((s) => nextFlap(s, stack));
-      setFlipping(false);
-      onFlapRef.current?.();
-    }, flipMs);
-    return () => window.clearTimeout(timer);
-  }, [flipping, flipMs, stack]);
-
-  const current = stack[shown] ?? " ";
-  const next = flipping ? stack[nextFlap(shown, stack)] : current;
+  const target = stack[flapIndex(char, stack)];
+  const nextOf = useCallback((c: string) => stack[nextFlap(Math.max(0, stack.indexOf(c)), stack)], [stack]);
+  const { shown: current, next, flipping } = useFlapMotion(stack[0], target, nextOf, flipMs, clock, onFlap);
 
   const vars = {
     "--sf-w": `${width}px`,
@@ -83,13 +55,13 @@ export const SplitFlapCell = memo(function SplitFlapCell({
   } as CSSProperties;
 
   return (
-    <div className={`sf-cell${className ? ` ${className}` : ""}`} style={vars} aria-label={stack[target]}>
+    <div className={`sf-cell${className ? ` ${className}` : ""}`} style={vars} aria-label={target}>
       {/* What is revealed behind the flaps: the next character's top, the old one's bottom. */}
       <Half pos="top" glyph={next} />
       <Half pos="bottom" glyph={current} />
       {flipping && (
         // Keyed by position so each flip remounts the flaps and restarts their animation.
-        <span key={shown} className="sf-flaps">
+        <span key={current} className="sf-flaps">
           <Half pos="top" glyph={current} flap />
           <Half pos="bottom" glyph={next} flap />
         </span>
