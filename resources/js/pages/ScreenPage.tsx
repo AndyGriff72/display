@@ -86,7 +86,7 @@ export default function ScreenPage() {
             records={data.rows}
             page={page}
             onFlap={onFlap}
-            onBeat={onFlap ? (landed, dueAt) => flapSound.beat(landed, dueAt) : undefined}
+            onBeat={onFlap ? (landed, dueAt, ofTotal) => flapSound.beat(landed, dueAt, ofTotal) : undefined}
             onDotFlips={onFlap ? (delays) => flapSound.dotFlips(delays) : undefined}
           />
         </div>

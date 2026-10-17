@@ -246,11 +246,12 @@ class FlapSound {
    *
    * @param dueAt when the beat was due, in Date.now() time: its sound is played at exactly
    *   that moment plus BEAT_LATENCY, however late the browser ran the beat
+   * @param ofTotal how many split-flaps the board has: all of them landing is full loudness
    */
-  beat(landed: number, dueAt = Date.now()): void {
+  beat(landed: number, dueAt = Date.now(), ofTotal = landed): void {
     const ctx = this.ctx;
     if (!this.enabled || !ctx || !this.output || ctx.state !== "running") return;
-    const { voices, gain, spreadMs } = beatSound(landed);
+    const { voices, gain, spreadMs } = beatSound(landed, ofTotal);
     const at = Math.max(ctx.currentTime, ctx.currentTime + BEAT_LATENCY + (dueAt - Date.now()) / 1000);
     for (const offset of beatOffsets(voices, spreadMs)) this.voice(ctx, at + offset / 1000, gain);
   }
@@ -274,8 +275,10 @@ class FlapSound {
  *
  * Many flaps landing "together" are really many mechanisms landing within a few milliseconds
  * of each other, each a little different, so a beat is played as several flaps, scattered:
- * - loudness grows with the number of flaps, steeply enough that a lone flap is a light tick
- *   and a whole row a hard clack, reaching full at BEAT_FULL flaps;
+ * - loudness grows with the share of the board's split-flaps landing, `ofTotal`: all of them is
+ *   full, and every flap fewer is a little quieter, so a change dies away as its last tiles
+ *   settle however big the board (a fixed count for full loudness would leave a big board at
+ *   full almost to the end); a lone flap is a light tick;
  * - the number of flaps played grows too (about 1.6 per square root of those landing), up to
  *   BEAT_MAX_VOICES, so a big change sounds denser as well as louder, past full loudness;
  * - and they spread over a window that widens with the number, up to BEAT_MAX_SPREAD_MS.
@@ -283,9 +286,9 @@ class FlapSound {
  * `gain` is for each flap played: together they make the beat's loudness, as sounds that do not
  * line up exactly add (by the square root of how many there are).
  */
-export function beatSound(landed: number): { voices: number; gain: number; spreadMs: number } {
+export function beatSound(landed: number, ofTotal = landed): { voices: number; gain: number; spreadMs: number } {
   if (landed <= 0) return { voices: 0, gain: 0, spreadMs: 0 };
-  const loudness = Math.min(1, Math.pow(landed / BEAT_FULL, BEAT_DYNAMICS));
+  const loudness = Math.min(1, Math.pow(landed / Math.max(1, ofTotal), BEAT_DYNAMICS));
   const voices = Math.min(landed, BEAT_MAX_VOICES, Math.ceil(1.6 * Math.sqrt(landed)));
   const spreadMs = landed === 1 ? 0 : Math.min(BEAT_MAX_SPREAD_MS, 3 + 3.5 * Math.sqrt(landed));
   return { voices, gain: loudness / Math.sqrt(voices), spreadMs };
@@ -300,14 +303,12 @@ export function beatOffsets(voices: number, spreadMs: number, random: () => numb
   return Array.from({ length: voices }, (_, i) => (i === 0 ? 0 : spreadMs * Math.pow(random(), 1.6))).sort((a, b) => a - b);
 }
 
-/** How many flaps landing on one beat sound as loud as a board can. */
-const BEAT_FULL = 24;
-
 /**
- * How steeply a beat's loudness rises with its flaps: 0 would make every beat the same, 1 make
- * loudness follow the count. At 0.45 a lone flap is about a quarter of full, six flaps half.
+ * How steeply a beat's loudness rises with the share of the board landing: 0 would make every
+ * beat the same, 1 make loudness follow the share. At 0.4, a fifth of the board landing is half
+ * of full, and on a board of 180 split-flaps a lone flap is about an eighth.
  */
-const BEAT_DYNAMICS = 0.45;
+const BEAT_DYNAMICS = 0.4;
 
 /** The most flaps played for one beat. */
 const BEAT_MAX_VOICES = 16;

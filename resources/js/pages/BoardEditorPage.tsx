@@ -60,7 +60,7 @@ const TABS = [
 type Tab = (typeof TABS)[number]["id"];
 
 const playFlap = () => flapSound.play();
-const playBeat = (landed: number, dueAt: number) => flapSound.beat(landed, dueAt);
+const playBeat = (landed: number, dueAt: number, ofTotal: number) => flapSound.beat(landed, dueAt, ofTotal);
 const playDotFlips = (delaysMs: number[]) => flapSound.dotFlips(delaysMs);
 
 /** What is compared to tell whether a board has unsaved changes. */

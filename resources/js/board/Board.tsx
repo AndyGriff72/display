@@ -32,10 +32,10 @@ export interface BoardProps {
   /** Which page of records lists show; see pageOffset. */
   page?: number;
   /**
-   * Called on each beat that split-flaps land on, with how many landed together, and when the
-   * beat was due in Date.now() time (see FlapClock).
+   * Called on each beat that split-flaps land on, with how many landed together, when the beat
+   * was due in Date.now() time (see FlapClock), and how many split-flaps the board has.
    */
-  onBeat?: (landed: number, dueAt: number) => void;
+  onBeat?: (landed: number, dueAt: number, ofTotal: number) => void;
   /** When the board's flaps keep their own time (flapTiming "independent"): called each time one lands. */
   onFlap?: () => void;
   /** Called when flip-dot discs turn, with the delay in milliseconds of each column that turns. */
@@ -57,7 +57,9 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
   const statics = useMemo(() => placedAreas(layout, layout.statics ?? []), [layout]);
   const flaps = useMemo(() => wholeValueFlaps(layout, values, records, page), [layout, values, records, page]);
   const drums = useDrums(flaps);
-  const clockFor = useFlapClocks(layout.cell.flapTiming !== "independent", onBeat);
+  // Every split-flap on the board: what a beat's flaps are measured against.
+  const splitFlaps = useMemo(() => [...specs.values()].filter((s) => s.type === "splitflap").length + flaps.length, [specs, flaps]);
+  const clockFor = useFlapClocks(layout.cell.flapTiming !== "independent", onBeat, splitFlaps);
   const images = useMemo(() => imageAreas(layout, values, records, page), [layout, values, records, page]);
   const fields = useMemo(
     () => (showAreas ? placedAreas(layout, [...(layout.fields ?? []), ...(layout.lists ?? [])]) : []),
@@ -179,10 +181,16 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
  * so all the flaps that fall at one speed fall together. Kept for as long as the board is up,
  * and stopped when it goes. Returns undefined for every flip time when flaps keep their own time.
  */
-function useFlapClocks(together: boolean, onBeat?: (landed: number, dueAt: number) => void): (flipMs?: number) => FlapClock | undefined {
+function useFlapClocks(
+  together: boolean,
+  onBeat: ((landed: number, dueAt: number, ofTotal: number) => void) | undefined,
+  splitFlaps: number
+): (flipMs?: number) => FlapClock | undefined {
   const clocks = useRef(new Map<number, FlapClock>());
   const onBeatRef = useRef(onBeat);
   onBeatRef.current = onBeat;
+  const splitFlapsRef = useRef(splitFlaps);
+  splitFlapsRef.current = splitFlaps;
   useEffect(() => {
     const all = clocks.current;
     // Stopped, but kept: a cell that mounts again (React's strict mode does this) joins the same one.
@@ -193,7 +201,7 @@ function useFlapClocks(together: boolean, onBeat?: (landed: number, dueAt: numbe
   return (flipMs = DEFAULT_FLIP_MS) => {
     if (!together) return undefined;
     let clock = clocks.current.get(flipMs);
-    if (!clock) clocks.current.set(flipMs, (clock = new FlapClock(flipMs, (landed, dueAt) => onBeatRef.current?.(landed, dueAt))));
+    if (!clock) clocks.current.set(flipMs, (clock = new FlapClock(flipMs, (landed, dueAt) => onBeatRef.current?.(landed, dueAt, splitFlapsRef.current))));
     return clock;
   };
 }
