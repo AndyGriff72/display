@@ -130,7 +130,15 @@ class FlapSound {
       });
       this.output = this.ctx.createGain();
       this.output.gain.value = this.volume;
-      this.output.connect(this.ctx.destination);
+      // A limiter, so the loudest beats (many flaps landing almost at once) never distort; it
+      // leaves anything quieter alone.
+      const limiter = this.ctx.createDynamicsCompressor();
+      limiter.threshold.value = -4;
+      limiter.knee.value = 4;
+      limiter.ratio.value = 12;
+      limiter.attack.value = 0.002;
+      limiter.release.value = 0.12;
+      this.output.connect(limiter).connect(this.ctx.destination);
       this.prepare(this.ctx);
     }
     return this.ctx;
@@ -232,8 +240,9 @@ class FlapSound {
   }
 
   /**
-   * A beat of the board's clock (see FlapClock): one sound for all the flaps that landed on it,
-   * fuller the more there are. Beats are never dropped: they are what makes the rhythm.
+   * A beat of the board's clock (see FlapClock): the flaps that landed on it, played as a
+   * scatter of flaps that is louder, denser and wider the more there are (see beatSound).
+   * Beats are never dropped: they are what makes the rhythm.
    *
    * @param dueAt when the beat was due, in Date.now() time: its sound is played at exactly
    *   that moment plus BEAT_LATENCY, however late the browser ran the beat
@@ -241,9 +250,9 @@ class FlapSound {
   beat(landed: number, dueAt = Date.now()): void {
     const ctx = this.ctx;
     if (!this.enabled || !ctx || !this.output || ctx.state !== "running") return;
-    const { gain, voices } = beatVoices(landed);
+    const { voices, gain, spreadMs } = beatSound(landed);
     const at = Math.max(ctx.currentTime, ctx.currentTime + BEAT_LATENCY + (dueAt - Date.now()) / 1000);
-    for (let i = 0; i < voices; i++) this.voice(ctx, at + (i === 0 ? 0 : Math.random() * BEAT_SPREAD), gain);
+    for (const offset of beatOffsets(voices, spreadMs)) this.voice(ctx, at + offset / 1000, gain);
   }
 
   /** One flap landing, when flaps keep their own time. */
@@ -261,30 +270,56 @@ class FlapSound {
 }
 
 /**
- * How a beat of `landed` flaps sounds: how loud, and how many flaps to play for it. A lone flap
- * is a single quiet click; a whole row landing together is a fuller, louder "clack", made of a
- * few flaps a few milliseconds apart, as many mechanisms never land at exactly the same instant.
- * Exported for the tests.
+ * How a beat of `landed` flaps sounds. Exported for the tests.
+ *
+ * Many flaps landing "together" are really many mechanisms landing within a few milliseconds
+ * of each other, each a little different, so a beat is played as several flaps, scattered:
+ * - loudness grows with the number of flaps, steeply enough that a lone flap is a light tick
+ *   and a whole row a hard clack, reaching full at BEAT_FULL flaps;
+ * - the number of flaps played grows too (about 1.6 per square root of those landing), up to
+ *   BEAT_MAX_VOICES, so a big change sounds denser as well as louder, past full loudness;
+ * - and they spread over a window that widens with the number, up to BEAT_MAX_SPREAD_MS.
+ *
+ * `gain` is for each flap played: together they make the beat's loudness, as sounds that do not
+ * line up exactly add (by the square root of how many there are).
  */
-export function beatVoices(landed: number): { gain: number; voices: number } {
-  if (landed <= 0) return { gain: 0, voices: 0 };
-  const fullness = Math.min(1, Math.log2(landed) / Math.log2(BEAT_FULL));
-  const voices = landed === 1 ? 1 : landed < 6 ? 2 : 3;
-  // Louder with more flaps, the voices sharing it between them.
-  return { gain: (0.55 + 0.45 * fullness) / Math.sqrt(voices), voices };
+export function beatSound(landed: number): { voices: number; gain: number; spreadMs: number } {
+  if (landed <= 0) return { voices: 0, gain: 0, spreadMs: 0 };
+  const loudness = Math.min(1, Math.pow(landed / BEAT_FULL, BEAT_DYNAMICS));
+  const voices = Math.min(landed, BEAT_MAX_VOICES, Math.ceil(1.6 * Math.sqrt(landed)));
+  const spreadMs = landed === 1 ? 0 : Math.min(BEAT_MAX_SPREAD_MS, 3 + 3.5 * Math.sqrt(landed));
+  return { voices, gain: loudness / Math.sqrt(voices), spreadMs };
+}
+
+/**
+ * When each flap of a beat plays, in milliseconds after the beat: the first on it, the rest
+ * scattered through the spread, most of them close behind and a few stragglers later, as
+ * mechanisms do. Exported for the tests.
+ */
+export function beatOffsets(voices: number, spreadMs: number, random: () => number = Math.random): number[] {
+  return Array.from({ length: voices }, (_, i) => (i === 0 ? 0 : spreadMs * Math.pow(random(), 1.6))).sort((a, b) => a - b);
 }
 
 /** How many flaps landing on one beat sound as loud as a board can. */
-const BEAT_FULL = 32;
+const BEAT_FULL = 24;
+
+/**
+ * How steeply a beat's loudness rises with its flaps: 0 would make every beat the same, 1 make
+ * loudness follow the count. At 0.45 a lone flap is about a quarter of full, six flaps half.
+ */
+const BEAT_DYNAMICS = 0.45;
+
+/** The most flaps played for one beat. */
+const BEAT_MAX_VOICES = 16;
+
+/** The widest a beat's flaps spread, in milliseconds. */
+const BEAT_MAX_SPREAD_MS = 25;
 
 /**
  * How far behind its beat each beat's sound plays, in seconds: enough that a timer the browser
  * ran late can still be put back exactly on the beat, so the rhythm stays steady.
  */
 const BEAT_LATENCY = 0.04;
-
-/** The spread of the flaps in one beat, in seconds. */
-const BEAT_SPREAD = 0.008;
 
 /** One variant of a synthesised click (see clickSynth.ts), ready to play. */
 function synthesiseClick(ctx: AudioContext, style: SynthStyle): AudioBuffer {
