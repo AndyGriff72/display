@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { enableBeatTiming } from "../cells/splitflap/beatTiming";
-import { FlapClock } from "../cells/splitflap/flapClock";
+import { FlapClock, MotionTracker } from "../cells/splitflap/flapClock";
 import { DotMatrixCell } from "../cells/dotmatrix/DotMatrixCell";
 import { FlipDotCell } from "../cells/flipdot/FlipDotCell";
 import { SegmentCell } from "../cells/segment/SegmentCell";
@@ -43,8 +43,7 @@ export interface BoardProps {
   /**
    * Called when the board has finished showing a page, a new layout, or new data: when its last
    * split-flap stops (at once, if nothing had to move). Paging counts from here (see usePaging).
-   * Data that changes nothing on the board does not call it. When flaps keep their own time
-   * (flapTiming "independent") the board cannot tell, and calls it as each page starts.
+   * Data that changes nothing on the board does not call it.
    */
   onSettled?: () => void;
   /** Called when flip-dot discs turn, with the delay in milliseconds of each column that turns. */
@@ -76,14 +75,31 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
   const splitFlaps = useMemo(() => [...specs.values()].filter((s) => s.type === "splitflap").length + flaps.length, [specs, flaps]);
   const onSettledRef = useRef(onSettled);
   onSettledRef.current = onSettled;
-  const clocks = useFlapClocks(layout.cell.flapTiming !== "independent", onBeat, splitFlaps, () => onSettledRef.current?.());
+  // Drums keeping their own time (no clock) say when they move, so the board still knows when a
+  // change is over.
+  const trackerRef = useRef<MotionTracker | null>(null);
+  trackerRef.current ??= new MotionTracker(() => {
+    if (!clocks.busy()) onSettledRef.current?.();
+  });
+  const tracker = trackerRef.current;
+  const clocks = useFlapClocks(layout.cell.flapTiming !== "independent", onBeat, splitFlaps, () => {
+    if (!tracker.busy) onSettledRef.current?.();
+  });
   const clockFor = clocks.clockFor;
-  // Each row starts this many beats after the row above (see CellSettings.rowDelay).
-  const rowDelay = layout.cell.flapTiming !== "independent" ? (layout.cell.rowDelay ?? 0) : 0;
+  // How rows take their turn (see CellSettings): each a number of beats after the row above,
+  // or each once the rows above have finished; and whether a changing row clears first.
+  const together = layout.cell.flapTiming !== "independent";
+  const rowsInTurn = together && layout.cell.rowsInTurn === true;
+  const rowDelay = together && !rowsInTurn ? (layout.cell.rowDelay ?? 0) : 0;
+  const rowKeys = useMemo(() => (layout.cell.clearRows ? rowContents(cells, flaps) : null), [layout.cell.clearRows, cells, flaps]);
+  for (const flipMs of new Set([...specs.values(), ...flaps.map((f) => f.spec)].map((s) => s.flipMs))) {
+    const clock = clockFor(flipMs);
+    if (clock) clock.rowByRow = rowsInTurn;
+  }
   // A new page or layout: settled at once if nothing moves, or else when the last flap stops.
   // Cells join their clocks in their own (earlier-running) effects, so by now the board knows.
   useEffect(() => {
-    if (!clocks.busy()) onSettledRef.current?.();
+    if (!clocks.busy() && !tracker.busy) onSettledRef.current?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, layout]);
   const images = useMemo(() => imageAreas(layout, values, records, page), [layout, values, records, page]);
@@ -148,7 +164,10 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
                 stack={spec.stack}
                 flipMs={spec.flipMs}
                 clock={clockFor(spec.flipMs)}
+                tracker={together ? undefined : tracker}
                 startDelay={rowDelay * y}
+                row={y}
+                rowKey={rowKeys?.get(y)}
                 background={spec.background}
                 onFlap={onFlap}
               />
@@ -172,7 +191,10 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
             background={f.spec.background}
             flipMs={f.spec.flipMs}
             clock={clockFor(f.spec.flipMs)}
+            tracker={together ? undefined : tracker}
             startDelay={rowDelay * f.rect.y1}
+            row={f.rect.y1}
+            rowKey={rowKeys?.get(f.rect.y1)}
             align={f.align}
             images={f.image}
             fit={f.fit}
@@ -258,6 +280,26 @@ function useFlapClocks(
     return clock;
   };
   return { clockFor, busy };
+}
+
+/**
+ * What each board row shows, as one string per row: its characters, and the values of any
+ * whole-value flaps starting on it. When a row's string changes, a board whose rows clear
+ * before changing clears that row (see CellSettings.clearRows).
+ */
+function rowContents(cells: Map<string, string>, flaps: Flap[]): Map<number, string> {
+  const rows = new Map<number, string[]>();
+  const add = (row: number, part: string) => {
+    let parts = rows.get(row);
+    if (!parts) rows.set(row, (parts = []));
+    parts.push(part);
+  };
+  for (const [key, ch] of cells) {
+    const [x, y] = key.split(",");
+    add(Number(y), `${x}:${ch}`);
+  }
+  for (const f of flaps) add(f.rect.y1, `${f.key}=${f.value}`);
+  return new Map([...rows].map(([row, parts]) => [row, parts.join("|")]));
 }
 
 /** As SplitFlapCell's own default. */

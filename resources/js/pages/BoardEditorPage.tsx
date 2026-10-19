@@ -113,6 +113,8 @@ export default function BoardEditorPage() {
   const [flipMs, setFlipMs] = useState(80);
   const [flapTiming, setFlapTiming] = useState<FlapTiming>("together");
   const [rowDelay, setRowDelay] = useState(0);
+  const [rowsInTurn, setRowsInTurn] = useState(false);
+  const [clearRows, setClearRows] = useState(false);
   const [fontId, setFontId] = useState(FONTS[0].id);
   const [stackName, setStackName] = useState<CharsetName>("standard");
   // Saved with the board: whether it makes the flap sound, here and on screens.
@@ -201,7 +203,8 @@ export default function BoardEditorPage() {
         stack: CHARSETS[stackName],
         flipMs,
         ...(flapTiming !== "together" ? { flapTiming } : {}),
-        ...(rowDelay > 0 ? { rowDelay } : {}),
+        ...(rowsInTurn ? { rowsInTurn } : rowDelay > 0 ? { rowDelay } : {}),
+        ...(clearRows ? { clearRows } : {}),
         segments,
         ...(finish !== "led" ? { finish } : {}),
         ...(cellType === "text"
@@ -217,7 +220,7 @@ export default function BoardEditorPage() {
           : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, rowsInTurn, clearRows, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -252,6 +255,8 @@ export default function BoardEditorPage() {
     setFlipMs(cell.flipMs ?? 80);
     setFlapTiming(cell.flapTiming ?? "together");
     setRowDelay(cell.rowDelay ?? 0);
+    setRowsInTurn(cell.rowsInTurn === true);
+    setClearRows(cell.clearRows === true);
     setFontId(FONTS.find((f) => f.family === cell.fontFamily)?.id ?? FONTS[0].id);
     setStackName(
       (Object.keys(CHARSETS) as CharsetName[]).find((k) => cell.stack !== undefined && CHARSETS[k] === normalizeStack(cell.stack)) ??
@@ -616,16 +621,34 @@ export default function BoardEditorPage() {
                       {flapTiming === "together" && (
                         <label title="Many station boards updated a row at a time, so a change rippled down the board">
                           Rows start
-                          <select value={rowDelay} onChange={(e) => setRowDelay(Number(e.target.value))}>
+                          <select
+                            value={rowsInTurn ? "finished" : rowDelay}
+                            onChange={(e) => {
+                              setRowsInTurn(e.target.value === "finished");
+                              setRowDelay(e.target.value === "finished" ? 0 : Number(e.target.value));
+                            }}
+                          >
                             <option value={0}>All together</option>
                             {Array.from({ length: MAX_ROW_DELAY }, (_, i) => i + 1).map((n) => (
                               <option key={n} value={n}>
                                 Each {n} beat{n === 1 ? "" : "s"} after the row above
                               </option>
                             ))}
+                            <option value="finished">Each once the row above has finished</option>
                           </select>
                         </label>
                       )}
+                      <label
+                        className="check"
+                        title={
+                          flapTiming === "together"
+                            ? "As on boards whose modules returned home before every change: the whole row goes blank, then fills"
+                            : "With flaps each in their own time, each tile goes blank and then on, without waiting for the rest of its row"
+                        }
+                      >
+                        <input type="checkbox" checked={clearRows} onChange={(e) => setClearRows(e.target.checked)} />
+                        Clear each row before showing its new data
+                      </label>
                     </>
                   )}
                   <label className="check" title="Positions outside every field, list and static area, including gaps between list columns">

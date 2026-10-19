@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { faceFor } from "../../board/compose";
-import type { FlapClock } from "./flapClock";
+import type { FlapClock, MotionTracker } from "./flapClock";
 import { flapShades } from "./SplitFlapCell";
 import { useFlapMotion } from "./useFlapMotion";
 import "./SplitFlapCell.css";
@@ -30,8 +30,14 @@ export interface WholeValueFlapProps {
   clock?: FlapClock;
   /** Without a clock: called each time a flap lands. */
   onFlap?: () => void;
+  /** Without a clock: told when the flap starts and stops moving. */
+  tracker?: MotionTracker;
   /** With a clock: beats to wait before starting to move (rows starting in turn). */
   startDelay?: number;
+  /** The board row it is in, for a clock moving a row at a time. */
+  row?: number;
+  /** The contents of its row, when rows clear before changing (see SplitFlapCell). */
+  rowKey?: string;
   style?: CSSProperties;
 }
 
@@ -61,12 +67,15 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   fit = "contain",
   clock,
   onFlap,
+  tracker,
   startDelay = 0,
+  row = 0,
+  rowKey,
   style,
 }: WholeValueFlapProps) {
   const target = faces[faceFor(value, faces, images)] ?? "";
   const nextOf = useCallback((face: string) => faces[(faceFor(face, faces, images) + 1) % faces.length] ?? "", [faces, images]);
-  const motion = useFlapMotion("", target, nextOf, flipMs, clock, onFlap, startDelay);
+  const motion = useFlapMotion("", target, nextOf, flipMs, { clock, onFlap, tracker, startDelay, row, rowKey });
 
   const padding = Math.round(cellWidth * 0.25);
   const sizes = useFittedSizes(images ? [] : faces, fontFamily, Math.round(cellHeight * 0.7), width - 2 * padding);

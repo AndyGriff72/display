@@ -120,6 +120,18 @@ export interface CellSettings extends TextStyle {
    * row on the same beat. Up to MAX_ROW_DELAY.
    */
   rowDelay?: number;
+  /**
+   * Split-flap, with flapTiming "together": each row starts only once every tile in the rows
+   * above has stopped, so a change works down the board a row at a time. Takes the place of
+   * rowDelay.
+   */
+  rowsInTurn?: boolean;
+  /**
+   * Split-flap: when anything in a row changes, every tile in that row first goes round to the
+   * blank, and once the whole row is clear they set off for the new characters together, as
+   * on boards whose modules had to return home before each change.
+   */
+  clearRows?: boolean;
   /** Segment: 7 for digits, 14 for text. */
   segments?: 7 | 14;
   /** Dot matrix and segment: LED (the default), VFD, or lightbulbs (dot matrix only). */
@@ -361,6 +373,9 @@ export function validateLayout(layout: BoardLayout): string[] {
   errors.push(...textStyleProblems("The board's cells", cell ?? {}));
   if (cell?.rowDelay !== undefined && !(Number.isInteger(cell.rowDelay) && cell.rowDelay >= 0 && cell.rowDelay <= MAX_ROW_DELAY)) {
     errors.push(`The board's cells: rowDelay must be a whole number of beats, from 0 to ${MAX_ROW_DELAY}.`);
+  }
+  for (const key of ["rowsInTurn", "clearRows"] as const) {
+    if (cell?.[key] !== undefined && typeof cell[key] !== "boolean") errors.push(`The board's cells: ${key} must be true or false, without quotes.`);
   }
   if (cell?.flapTiming !== undefined && !FLAP_TIMINGS.includes(cell.flapTiming)) {
     errors.push(`The board's cells: flapTiming must be one of ${FLAP_TIMINGS.map((t) => `"${t}"`).join(", ")}.`);

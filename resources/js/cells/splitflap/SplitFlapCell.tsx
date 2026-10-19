@@ -1,9 +1,9 @@
 import { memo, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { CHARSETS } from "../charsets";
 import type { CellProps } from "../types";
-import type { FlapClock } from "./flapClock";
+import type { FlapClock, MotionTracker } from "./flapClock";
 import { flapIndex, nextFlap, normalizeStack } from "./flapStack";
-import { beatStep, type DrumState } from "./useFlapMotion";
+import { Drum, type FlapMover } from "./drum";
 import "./SplitFlapCell.css";
 
 export interface SplitFlapCellProps extends CellProps {
@@ -15,8 +15,17 @@ export interface SplitFlapCellProps extends CellProps {
   clock?: FlapClock;
   /** Without a clock: called each time a flap lands, e.g. to play the click. */
   onFlap?: () => void;
+  /** Without a clock: told when the cell starts and stops moving, so the board knows when it is still. */
+  tracker?: MotionTracker;
   /** With a clock: how many beats to wait before starting to move (rows starting in turn). */
   startDelay?: number;
+  /** The board row it is in, for a clock moving a row at a time. */
+  row?: number;
+  /**
+   * The contents of its whole row, given when rows clear before changing: when they change, the
+   * cell goes round to the blank and waits for the rest of the row before going on.
+   */
+  rowKey?: string;
   /** The flaps' colour, instead of the usual near-black. Any CSS colour. */
   background?: string;
 }
@@ -41,7 +50,10 @@ export const SplitFlapCell = memo(function SplitFlapCell({
   flipMs = 80,
   clock,
   onFlap,
+  tracker,
   startDelay = 0,
+  row = 0,
+  rowKey,
   background,
   className,
   style,
@@ -62,7 +74,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useLayoutEffect(() => {
-    drum.current?.set({ target, stack, flipMs, clock, onFlap, startDelay });
+    drum.current?.set({ target, stack, flipMs, clock, onFlap, tracker, startDelay, row, rowKey });
   });
 
   const vars = {
@@ -104,18 +116,22 @@ interface DrumSettings {
   flipMs: number;
   clock?: FlapClock;
   onFlap?: () => void;
+  tracker?: MotionTracker;
   startDelay?: number;
+  row?: number;
+  rowKey?: string;
 }
 
 /**
  * A split-flap cell's mechanism, working on its elements directly: which flap shows, the flap
  * falling, and moving on, on the board's beat (see FlapClock) or, without one, in its own time.
- * The rules for each step are beatStep's, as for the whole-value flaps.
+ * The rules for each step are Drum's, as for the whole-value flaps.
  */
-class FlapDrum {
-  private state: DrumState;
+class FlapDrum implements FlapMover {
+  private readonly drum: Drum;
   private settings: DrumSettings = { target: " ", stack: " ", flipMs: 80 };
-  private joined: FlapClock | null = null;
+  /** The row's contents last time: when they change (and the row clears first), it clears. */
+  private rowKey: string | undefined = undefined;
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** The four glyphs: the two halves at rest, and the two of the falling flap. */
   private readonly glyphs: HTMLElement[];
@@ -135,8 +151,7 @@ class FlapDrum {
     this.glyphs = [glyph(top), glyph(bottom), glyph(flapTop), glyph(flapBottom)];
     this.flapPair = pair;
     this.flapHalves = [flapTop, flapBottom];
-    // Starts on the blank, as a board does when it is switched on.
-    this.state = { shown: blank, flipping: false, target: blank, nextOf: (c) => c };
+    this.drum = new Drum(blank, (c) => c);
     this.draw();
   }
 
@@ -144,12 +159,14 @@ class FlapDrum {
     const old = this.settings;
     this.settings = settings;
     const { stack } = settings;
-    this.state.target = settings.target;
-    this.state.nextOf = (c) => stack[nextFlap(Math.max(0, stack.indexOf(c)), stack)];
+    this.drum.nextOf = (c) => stack[nextFlap(Math.max(0, stack.indexOf(c)), stack)];
+    // The row's contents changed, and rows clear first: go round to the blank, then on.
+    const clearFirst = settings.rowKey !== undefined && this.rowKey !== undefined && settings.rowKey !== this.rowKey;
+    this.rowKey = settings.rowKey;
+    this.drum.setTarget(settings.target, clearFirst);
     // A different beat (or none): leave the old one, and move on the new.
     if (old.clock !== settings.clock) {
-      this.joined?.leave(this.step);
-      this.joined = null;
+      old.clock?.leave(this);
       if (this.timer !== null) clearTimeout(this.timer);
       this.timer = null;
     }
@@ -157,75 +174,77 @@ class FlapDrum {
   }
 
   stop(): void {
-    this.joined?.leave(this.step);
-    this.joined = null;
+    this.settings.clock?.leave(this);
+    this.settings.tracker?.set(this, false);
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
     this.falling?.forEach((a) => a.cancel());
     this.falling = null;
   }
 
-  private get moving(): boolean {
-    return this.state.flipping || this.state.shown !== this.state.target;
-  }
-
   /** Start moving if there is somewhere to go and the drum is not already on its way. */
   private go(): void {
-    if (!this.moving) return;
+    if (!this.drum.moving) return;
     const { clock } = this.settings;
     if (clock) {
-      if (this.joined !== clock) {
-        this.joined = clock;
-        clock.join(this.step, this.settings.startDelay);
-      }
+      if (!clock.has(this)) clock.join(this, { row: this.settings.row, wait: this.settings.startDelay });
     } else if (this.timer === null) {
       this.ownTime();
     }
   }
 
-  /** One beat of the board's clock. */
-  private step = (): boolean => {
+  // --- FlapMover: what the board's clock asks of it on each beat ---
+
+  get cleared(): boolean {
+    return this.drum.cleared;
+  }
+
+  get done(): boolean {
+    return this.drum.done;
+  }
+
+  release(): void {
+    this.drum.release();
+  }
+
+  step(): boolean {
     // A hidden tab throttles timers; nobody is watching, so settle.
     if (document.hidden) {
-      this.settle();
+      this.drum.settle();
+      this.draw();
       return false;
     }
-    const landed = beatStep(this.state);
+    const landed = this.drum.step();
     this.draw();
-    if (!this.moving) {
-      this.joined?.leave(this.step);
-      this.joined = null;
-    }
     return landed;
-  };
+  }
 
   /** Without a clock: start the next flap now, and land it once it has fallen. */
   private ownTime(): void {
     if (document.hidden) {
-      this.settle();
+      this.drum.settle();
+      this.draw();
+      this.settings.tracker?.set(this, false);
       return;
     }
-    this.state.flipping = true;
-    this.draw();
+    // On its own there is no row to wait for: a drum clearing goes straight on from the blank.
+    if (this.drum.cleared) this.drum.release();
+    if (this.drum.done) {
+      this.settings.tracker?.set(this, false);
+      return;
+    }
+    this.settings.tracker?.set(this, true);
+    if (!this.drum.flipping) {
+      this.drum.step();
+      this.draw();
+    }
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.state.shown = this.state.nextOf(this.state.shown);
+      this.drum.step();
       this.settings.onFlap?.();
-      if (this.state.shown === this.state.target) {
-        this.state.flipping = false;
-        this.draw();
-      } else {
-        this.ownTime();
-      }
+      this.draw();
+      this.ownTime();
     }, this.settings.flipMs);
-  }
-
-  private settle(): void {
-    this.state.shown = this.state.target;
-    this.state.flipping = false;
-    this.joined?.leave(this.step);
-    this.joined = null;
-    this.draw();
   }
 
   /**
@@ -233,8 +252,8 @@ class FlapDrum {
    * the fall starting again from the top for every flap.
    */
   private draw(): void {
-    const { shown, flipping } = this.state;
-    const next = flipping ? this.state.nextOf(shown) : shown;
+    const { shown, flipping } = this.drum;
+    const next = flipping ? this.drum.nextOf(shown) : shown;
     this.write(0, next);
     this.write(1, shown);
     if (flipping) {
