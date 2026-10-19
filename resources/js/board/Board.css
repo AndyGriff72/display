@@ -150,21 +150,3 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-
-/*
- * Drawing experiments, for comparing with the ?timing readout on a real machine: on only with
- * ?timing&layers or ?timing&contain in the address.
- *
- * layers: keep each falling flap on a drawing layer of its own for good, instead of the browser
- * making one when a flap starts falling and dropping it when it stops (hundreds at once at the
- * start of every change).
- * contain: tell the browser each split-flap is self-contained, so what changes inside one never
- * makes it look again at anything outside it.
- */
-.board-try-layers .sf-flap {
-  will-change: transform;
-}
-
-.board-try-contain .sf-cell {
-  contain: layout paint style;
-}

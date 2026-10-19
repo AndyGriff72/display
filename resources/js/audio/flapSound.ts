@@ -56,6 +56,13 @@ class FlapSound {
   private dotTicks: AudioBuffer[] = [];
   /** Moments (in DOT_GAP_MS steps) a flip-dot tick is already booked for. */
   private dotSlots = new Set<number>();
+  /**
+   * Beats mixed in advance (see premixBeats), by how many flaps each holds (BEAT_TIERS), a few
+   * of each; empty until they are ready, when beats are mixed as they play instead.
+   */
+  private premixed = new Map<number, AudioBuffer[]>();
+  /** Counts the times the flap sound changed, so a mix started for an old one is thrown away. */
+  private soundVersion = 0;
 
   /**
    * Whether the sound is on but the browser is holding it back, as browsers do on a page nobody
@@ -146,12 +153,65 @@ class FlapSound {
 
   /** Have the current style's sound ready to play. */
   private prepare(ctx: AudioContext): void {
+    this.premixed = new Map();
+    const version = ++this.soundVersion;
     if (this.style === "recorded") {
-      this.loadRecording(ctx);
+      this.loadRecording(ctx).then(() => this.premixBeats(ctx, version));
     } else {
       const style = this.style as SynthStyle;
       this.synthesised = Array.from({ length: VARIANTS }, () => synthesiseClick(ctx, style));
+      this.premixBeats(ctx, version);
     }
+  }
+
+  /**
+   * Mix, in advance, the beats a board plays: for each size in BEAT_TIERS, a few versions of
+   * that many flaps scattered as beatOffsets scatters them, each flap a little different in
+   * pitch and strength, exactly as beats used to be mixed while they played. A beat then plays
+   * one ready-made sound at its loudness instead of building up to 16 flaps on the spot, so it
+   * costs the page almost nothing.
+   *
+   * Mixed off to one side (an OfflineAudioContext), faster than real time, once per sound.
+   */
+  private async premixBeats(ctx: AudioContext, version: number): Promise<void> {
+    const recorded = this.style === "recorded" && this.recording !== null;
+    const sources = recorded ? [this.recording!] : this.synthesised;
+    if (sources.length === 0) return;
+    const rate = recorded ? RECORDED_RATE : SYNTH_RATE;
+    const mixed = new Map<number, AudioBuffer[]>();
+    try {
+      for (const flaps of BEAT_TIERS) {
+        const { spreadMs } = beatSound(tierLanded(flaps));
+        const versions: AudioBuffer[] = [];
+        for (let v = 0; v < PREMIXED_VERSIONS; v++) {
+          const voices = beatOffsets(flaps, spreadMs).map((offset) => ({
+            buffer: sources[Math.floor(Math.random() * sources.length)],
+            at: offset / 1000,
+            rate: rate.from + Math.random() * rate.spread,
+            // The flaps share the beat's loudness, as sounds that do not line up exactly add.
+            gain: (recorded ? 0.8 + Math.random() * 0.2 : 1) / Math.sqrt(flaps),
+          }));
+          const seconds = Math.max(...voices.map((x) => x.at + x.buffer.duration / x.rate));
+          const channels = Math.max(...voices.map((x) => x.buffer.numberOfChannels));
+          const offline = new OfflineAudioContext(channels, Math.ceil(seconds * ctx.sampleRate), ctx.sampleRate);
+          for (const x of voices) {
+            const source = offline.createBufferSource();
+            source.buffer = x.buffer;
+            source.playbackRate.value = x.rate;
+            const level = offline.createGain();
+            level.gain.value = x.gain;
+            source.connect(level).connect(offline.destination);
+            source.start(x.at);
+          }
+          versions.push(await offline.startRendering());
+        }
+        mixed.set(flaps, versions);
+      }
+    } catch {
+      // Without them, beats are mixed as they play: as before, just costlier.
+      return;
+    }
+    if (version === this.soundVersion) this.premixed = mixed;
   }
 
   /** Fetch and decode the recording, once, levelled to the same peak as the synthesised sounds. */
@@ -253,6 +313,17 @@ class FlapSound {
     if (!this.enabled || !ctx || !this.output || ctx.state !== "running") return;
     const { voices, gain, spreadMs } = beatSound(landed, ofTotal);
     const at = Math.max(ctx.currentTime, ctx.currentTime + BEAT_LATENCY + (dueAt - Date.now()) / 1000);
+    const ready = this.premixed.get(beatTier(voices));
+    if (ready) {
+      // One ready-made beat of about this many flaps, at this beat's loudness.
+      const source = ctx.createBufferSource();
+      source.buffer = ready[Math.floor(Math.random() * ready.length)];
+      const level = ctx.createGain();
+      level.gain.value = gain * Math.sqrt(voices);
+      source.connect(level).connect(this.output);
+      source.start(at);
+      return;
+    }
     for (const offset of beatOffsets(voices, spreadMs)) this.voice(ctx, at + offset / 1000, gain);
   }
 
@@ -312,6 +383,25 @@ const BEAT_DYNAMICS = 0.4;
 
 /** The most flaps played for one beat. */
 const BEAT_MAX_VOICES = 16;
+
+/**
+ * The sizes of beat mixed in advance, in flaps (see premixBeats): every size up to four, where
+ * one flap more is clearly heard, then wider steps up to BEAT_MAX_VOICES.
+ */
+export const BEAT_TIERS = [1, 2, 3, 4, 6, 8, 11, 16];
+
+/** How many versions of each size are mixed, so that beats in a row do not sound identical. */
+const PREMIXED_VERSIONS = 4;
+
+/** The mixed-in-advance size nearest to a beat of `voices` flaps. Exported for the tests. */
+export function beatTier(voices: number): number {
+  return BEAT_TIERS.reduce((best, t) => (Math.abs(t - voices) < Math.abs(best - voices) ? t : best));
+}
+
+/** How many flaps landing make a beat of `flaps` flaps played (the inverse of beatSound's count). */
+function tierLanded(flaps: number): number {
+  return Math.max(1, Math.round((flaps / 1.6) ** 2));
+}
 
 /** The widest a beat's flaps spread, in milliseconds. */
 const BEAT_MAX_SPREAD_MS = 25;

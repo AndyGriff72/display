@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { beatOffsets, beatSound } from "./flapSound";
+import { BEAT_TIERS, beatOffsets, beatSound, beatTier } from "./flapSound";
 
 /** A beat's loudness: each flap's gain times the square root of how many play. */
 const loudness = (landed: number, ofTotal: number) => {
@@ -49,5 +49,21 @@ describe("beatOffsets", () => {
     expect(Math.max(...offsets)).toBeLessThanOrEqual(25);
     // Skewed early: more in the first half of the spread than the second.
     expect(offsets.filter((t) => t < 12.5).length).toBeGreaterThan(offsets.filter((t) => t >= 12.5).length);
+  });
+});
+
+describe("beatTier", () => {
+  it("plays each beat with the ready-made mix nearest its size, exact up to four flaps", () => {
+    expect([1, 2, 3, 4].map(beatTier)).toEqual([1, 2, 3, 4]);
+    expect(beatTier(5)).toBe(4);
+    expect(beatTier(7)).toBe(6);
+    expect(beatTier(10)).toBe(11);
+    expect(beatTier(16)).toBe(16);
+  });
+
+  it("has a ready-made mix for every size a beat can be", () => {
+    const sizes = new Set(Array.from({ length: 400 }, (_, i) => beatSound(i + 1, 400).voices));
+    for (const size of sizes) expect(Math.abs(beatTier(size) - size)).toBeLessThanOrEqual(2);
+    expect(BEAT_TIERS.at(-1)).toBe(Math.max(...sizes));
   });
 });

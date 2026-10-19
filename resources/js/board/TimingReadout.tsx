@@ -10,14 +10,13 @@ import "./TimingReadout.css";
  * Drawn on the page itself (a portal), not inside the board, so a screen's scaling of the board
  * does not shrink or move it.
  */
-export function TimingReadout({ experiments }: { experiments: string[] }) {
+export function TimingReadout() {
   // A new array each time, so the store's snapshot changes whenever a change does.
   const { changes, summary } = useSyncExternalStore(subscribeBeatTiming, snapshot);
   return createPortal(
     <div className="timing-readout" aria-live="off">
       <div className="timing-title">
-        Split-flap timing (beats should be {changes[0]?.periodMs ?? 80} ms apart) · trying:{" "}
-        {experiments.length ? experiments.join(" + ") : "nothing (add &layers or &contain to compare)"}
+        Split-flap timing (beats should be {changes[0]?.periodMs ?? 80} ms apart)
       </div>
       <Summary s={summary} />
       {changes.length === 0 && <div>Waiting for a change…</div>}
