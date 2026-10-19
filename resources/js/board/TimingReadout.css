@@ -18,6 +18,13 @@
   color: #9fd3ff;
 }
 
+.timing-summary {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #555;
+  color: #b6f0b6;
+}
+
 .timing-change + .timing-change {
   margin-top: 6px;
   padding-top: 6px;

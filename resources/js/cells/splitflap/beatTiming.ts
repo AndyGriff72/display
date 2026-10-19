@@ -32,7 +32,26 @@ export interface ChangeTiming {
   running: boolean;
 }
 
-const KEPT = 6;
+/**
+ * Every finished change of 12 beats or more since the page opened, summed: a steady figure to
+ * read on a screen whose recent changes come and go every few seconds.
+ */
+export interface TimingSummary {
+  changes: number;
+  lostTotalMs: number;
+  lostWorstMs: number;
+  frameTotalMs: number;
+  frameWorstMs: number;
+  stepTotalMs: number;
+  soundTotalMs: number;
+}
+
+const KEPT = 3;
+const summary: TimingSummary = { changes: 0, lostTotalMs: 0, lostWorstMs: 0, frameTotalMs: 0, frameWorstMs: 0, stepTotalMs: 0, soundTotalMs: 0 };
+
+export function timingSummary(): TimingSummary {
+  return summary;
+}
 let on = false;
 const changes: ChangeTiming[] = [];
 const listeners = new Set<() => void>();
@@ -125,7 +144,17 @@ export class ChangeRecorder {
   }
 
   end(): void {
-    this.timing.running = false;
+    const t = this.timing;
+    t.running = false;
+    if (t.beats >= 12) {
+      summary.changes++;
+      summary.lostTotalMs += t.lostMs;
+      summary.lostWorstMs = Math.max(summary.lostWorstMs, t.lostMs);
+      summary.frameTotalMs += t.longestFrameMs;
+      summary.frameWorstMs = Math.max(summary.frameWorstMs, t.longestFrameMs);
+      summary.stepTotalMs += t.stepMs;
+      summary.soundTotalMs += t.soundMs;
+    }
     notify();
   }
 }

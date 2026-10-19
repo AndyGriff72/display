@@ -54,10 +54,13 @@ export interface BoardProps {
 export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, onDotFlips, showAreas }: BoardProps) {
   const { cell } = layout;
   // ?timing in the address: record how the split-flaps keep time, and show it in a corner.
-  const [showTiming] = useState(() => {
-    const on = new URLSearchParams(window.location.search).has("timing");
+  // With it, ?layers and ?contain switch on drawing experiments (see Board.css) to compare.
+  const [timing] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const on = params.has("timing");
     if (on) enableBeatTiming();
-    return on;
+    const experiments = on ? TIMING_EXPERIMENTS.filter((e) => params.has(e)) : [];
+    return { on, experiments };
   });
   const specs = useMemo(() => cellSpecs(layout), [layout]);
   const cells = useMemo(() => composeBoard(layout, values, records, page), [layout, values, records, page]);
@@ -102,7 +105,10 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
   };
 
   return (
-    <div className={`board${showAreas ? " board-show-areas" : ""}`} style={gridStyle}>
+    <div
+      className={`board${showAreas ? " board-show-areas" : ""}${timing.experiments.map((e) => ` board-try-${e}`).join("")}`}
+      style={gridStyle}
+    >
       {[...cells].map(([key, ch]) => {
         const spec = specs.get(key);
         if (!spec) return null;
@@ -185,7 +191,7 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
           {showAreas && <span className="board-area-label">{s.id}</span>}
         </div>
       ))}
-      {showTiming && <TimingReadout />}
+      {timing.on && <TimingReadout experiments={timing.experiments} />}
       {fields.map(({ id, rect }) => (
         <div key={id} className="board-field-outline" style={gridArea(rect)}>
           <span className="board-area-label">{id}</span>
@@ -194,6 +200,9 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
     </div>
   );
 }
+
+/** Drawing experiments the ?timing readout can compare: see the board-try- rules in Board.css. */
+const TIMING_EXPERIMENTS = ["layers", "contain"];
 
 /**
  * The board's beats: one clock for each flip time its split-flaps use (an area can have its own),

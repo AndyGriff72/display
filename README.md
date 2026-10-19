@@ -42,7 +42,9 @@ To see how a board's split-flaps keep time on a particular machine, add `?timing
 address of a screen or the editor (e.g. `/screen/KEY?timing`). A corner readout then shows, for
 each of the last few changes: how late the first beat ran, the time the first 12 beats lost
 against the beat, the longest gaps between beats and between frames, and how long each beat's
-own work took (moving the tiles, and the sound).
+own work took (moving the tiles, and the sound), with averages over every change since the page
+opened. Adding `&layers` or `&contain` as well switches on a drawing experiment to compare
+(see the end of `resources/js/board/Board.css`).
 
 ## Running it
 
