@@ -64,8 +64,9 @@
  * apart rather than hiding a strip from its middle (where the bars of A, E and H are): so each
  * half's glyph is moved out by half the gap, and the bottom one also past the 1px border
  * along its top (which lies along the join, and would otherwise cover a row of the glyph
- * there). The top one stays a pixel lower than that would put it, so curves such as the S
- * still meet across the join rather than looking disjointed.
+ * there). The top one sits a pixel lower again, so the two parts are split by no more than
+ * the gap and diagonals (S, 2, 7) still line up across the join, at the cost of one row of
+ * the glyph hidden there.
  */
 .sf-glyph {
   position: absolute;
@@ -78,7 +79,7 @@
 }
 
 .sf-top .sf-glyph {
-  top: calc(var(--sf-gap) / -2);
+  top: calc(1px - var(--sf-gap) / 2);
 }
 
 .sf-bottom .sf-glyph {
