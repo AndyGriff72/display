@@ -38,6 +38,12 @@ Add `-Priority High` on a machine that only shows the screen, and `-KeepRaising`
 processes Edge starts later, after a reload say. `Get-Help scripts\start-screen.ps1 -Full`
 explains each option. Alt+F4 leaves kiosk mode.
 
+To see how a board's split-flaps keep time on a particular machine, add `?timing` to the
+address of a screen or the editor (e.g. `/screen/KEY?timing`). A corner readout then shows, for
+each of the last few changes: how late the first beat ran, the time the first 12 beats lost
+against the beat, the longest gaps between beats and between frames, and how long each beat's
+own work took (moving the tiles, and the sound).
+
 ## Running it
 
 ```sh

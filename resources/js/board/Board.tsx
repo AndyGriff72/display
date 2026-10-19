@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { enableBeatTiming } from "../cells/splitflap/beatTiming";
 import { FlapClock } from "../cells/splitflap/flapClock";
 import { DotMatrixCell } from "../cells/dotmatrix/DotMatrixCell";
 import { FlipDotCell } from "../cells/flipdot/FlipDotCell";
@@ -21,6 +22,7 @@ import {
   type WholeValueFlap as Flap,
 } from "./compose";
 import { parseArea, type BoardLayout, type Rect, type StaticArea } from "./layout";
+import { TimingReadout } from "./TimingReadout";
 import "./Board.css";
 
 export interface BoardProps {
@@ -51,6 +53,12 @@ export interface BoardProps {
  */
 export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, onDotFlips, showAreas }: BoardProps) {
   const { cell } = layout;
+  // ?timing in the address: record how the split-flaps keep time, and show it in a corner.
+  const [showTiming] = useState(() => {
+    const on = new URLSearchParams(window.location.search).has("timing");
+    if (on) enableBeatTiming();
+    return on;
+  });
   const specs = useMemo(() => cellSpecs(layout), [layout]);
   const cells = useMemo(() => composeBoard(layout, values, records, page), [layout, values, records, page]);
   const texts = useMemo(() => textBlocks(layout, values, records, page), [layout, values, records, page]);
@@ -177,6 +185,7 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
           {showAreas && <span className="board-area-label">{s.id}</span>}
         </div>
       ))}
+      {showTiming && <TimingReadout />}
       {fields.map(({ id, rect }) => (
         <div key={id} className="board-field-outline" style={gridArea(rect)}>
           <span className="board-area-label">{id}</span>

@@ -12,6 +12,8 @@
  * also says when it should have happened, so the sound can be put exactly on it.
  */
 
+import { beatTimingOn, ChangeRecorder } from "./beatTiming";
+
 /** A cell's part on each beat: true if a flap of its landed. */
 export type FlapStep = () => boolean;
 
@@ -21,6 +23,8 @@ export class FlapClock {
   /** When beat 0 was due, in Date.now() time, and the number of the next beat. */
   private startedAt = 0;
   private beatNumber = 0;
+  /** This change's timings, when the board's address asks for them (see beatTiming). */
+  private recorder: ChangeRecorder | null = null;
 
   /**
    * @param periodMs one beat: how long a flap takes to fall
@@ -41,6 +45,7 @@ export class FlapClock {
     if (this.timer === null) {
       this.startedAt = Date.now();
       this.beatNumber = 1;
+      this.recorder = beatTimingOn() ? new ChangeRecorder(this.periodMs) : null;
       this.schedule();
     }
   }
@@ -54,6 +59,8 @@ export class FlapClock {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
     this.steps.clear();
+    this.recorder?.end();
+    this.recorder = null;
   }
 
   private dueAt(): number {
@@ -66,12 +73,18 @@ export class FlapClock {
 
   private tick = (): void => {
     const dueAt = this.dueAt();
+    const ranAt = Date.now();
+    const t0 = performance.now();
     let landed = 0;
     for (const step of [...this.steps]) if (step()) landed++;
+    const t1 = performance.now();
     if (landed > 0) this.onBeat(landed, dueAt);
+    this.recorder?.beat(dueAt, ranAt, t1 - t0, performance.now() - t1);
     // Nothing left to move: rest until a cell joins again.
     if (this.steps.size === 0) {
       this.timer = null;
+      this.recorder?.end();
+      this.recorder = null;
       return;
     }
     // The next beat on the count; if the browser was so late that beats were missed, the next
