@@ -26,8 +26,38 @@ export const DEFAULT_SOUND_STYLE: SoundStyle = "recorded";
 
 const MIN_GAP_MS = 50;
 
-/** Closest two flip-dot ticks may be, in milliseconds: closer ones merge into the rattle. */
-const DOT_GAP_MS = 8;
+/**
+ * The clicks of flip-dot discs snapping over, as a sign sweeps across: when each is heard, in
+ * milliseconds from now, and how loud. Exported for the tests.
+ *
+ * Each column that turns is a few discs snapping, so one to three clicks, a few milliseconds
+ * apart, as the discs land (DOT_LAND_MS after their column starts to turn). The sweep moves a
+ * column every few milliseconds, and clicks at exactly that spacing are heard not as clicks but
+ * as a low buzz (at 7 ms apart, a tone of about 140 Hz): so every click is moved a little at
+ * random, and the sweep is a dry rattle, as real signs' is.
+ */
+export function dotTickTimes(delaysMs: number[], random: () => number = Math.random): { at: number; gain: number }[] {
+  const ticks: { at: number; gain: number }[] = [];
+  for (const delay of delaysMs) {
+    const clicks = 1 + (random() < 0.55 ? 1 : 0) + (random() < 0.2 ? 1 : 0);
+    for (let k = 0; k < clicks; k++) {
+      ticks.push({ at: delay + DOT_LAND_MS + (random() * 2 - 1) * DOT_JITTER_MS + k * (1 + random() * 3), gain: 0.45 + random() * 0.55 });
+    }
+  }
+  return ticks.sort((a, b) => a.at - b.at);
+}
+
+/** When a disc is heard snapping into place, after its column starts to turn (FLIP_MS is 140). */
+const DOT_LAND_MS = 120;
+
+/** How far each click is moved at random, either way, to keep the sweep from buzzing. */
+const DOT_JITTER_MS = 3.5;
+
+/** Closest two flip-dot clicks may be, in milliseconds: closer ones merge into the rattle. */
+const DOT_GAP_MS = 2.5;
+
+/** Booked clicks are filed by time in steps this long (ms), to find near ones quickly. */
+const DOT_BUCKET_MS = 0.5;
 const VARIANTS = 8;
 
 /** Playback speed for synthesised flaps (tuned by ear), with a little variation each time. */
@@ -54,8 +84,8 @@ class FlapSound {
   private style: SoundStyle = DEFAULT_SOUND_STYLE;
   private listeners = new Set<() => void>();
   private dotTicks: AudioBuffer[] = [];
-  /** Moments (in DOT_GAP_MS steps) a flip-dot tick is already booked for. */
-  private dotSlots = new Set<number>();
+  /** When flip-dot clicks are booked for (audio clock, in DOT_BUCKET_MS steps), so clicks too close together are left out. */
+  private dotBooked = new Set<number>();
   /**
    * Beats mixed in advance (see premixBeats), by how many flaps each holds (BEAT_TIERS), a few
    * of each; empty until they are ready, when beats are mixed as they play instead.
@@ -273,29 +303,35 @@ class FlapSound {
   }
 
   /**
-   * Flip-dot discs turning over: a tick for each column that turns, at its moment in the sweep
-   * (delays in milliseconds from now). Ticks closer than DOT_GAP_MS to one already booked are
-   * left out, so a whole board changing is a rattle across it rather than a roar.
+   * Flip-dot discs turning over: clicks for each column that turns (delays in milliseconds from
+   * now, as the sweep reaches it), scattered as dotTickTimes says. Clicks within DOT_GAP_MS of
+   * one already booked (many characters turn the same columns of the board at once) are left
+   * out, so a whole board changing is a rattle across it rather than a roar.
    */
   dotFlips(delaysMs: number[]): void {
     const ctx = this.ctx;
     if (!this.enabled || !ctx || !this.output || ctx.state !== "running" || this.dotTicks.length === 0) return;
 
-    const now = ctx.currentTime;
-    if (this.dotSlots.size > 2000) {
-      const past = Math.floor((now * 1000) / DOT_GAP_MS);
-      for (const slot of this.dotSlots) if (slot < past) this.dotSlots.delete(slot);
+    const nowMs = ctx.currentTime * 1000;
+    if (this.dotBooked.size > 4000) {
+      const past = Math.floor(nowMs / DOT_BUCKET_MS);
+      for (const bucket of this.dotBooked) if (bucket < past) this.dotBooked.delete(bucket);
     }
-    for (const delay of delaysMs) {
-      const at = now + delay / 1000;
-      const slot = Math.round((at * 1000) / DOT_GAP_MS);
-      if (this.dotSlots.has(slot)) continue;
-      this.dotSlots.add(slot);
+    const near = Math.ceil(DOT_GAP_MS / DOT_BUCKET_MS);
+    for (const { at, gain } of dotTickTimes(delaysMs)) {
+      const when = nowMs + at;
+      const bucket = Math.round(when / DOT_BUCKET_MS);
+      let taken = false;
+      for (let b = bucket - near + 1; b < bucket + near && !taken; b++) taken = this.dotBooked.has(b);
+      if (taken) continue;
+      this.dotBooked.add(bucket);
       const source = ctx.createBufferSource();
       source.buffer = this.dotTicks[Math.floor(Math.random() * this.dotTicks.length)];
-      source.playbackRate.value = 0.9 + Math.random() * 0.2;
-      source.connect(this.output);
-      source.start(at);
+      source.playbackRate.value = 0.85 + Math.random() * 0.3;
+      const level = ctx.createGain();
+      level.gain.value = gain;
+      source.connect(level).connect(this.output);
+      source.start(when / 1000);
     }
   }
 
