@@ -85,7 +85,9 @@
   bottom: calc(-1px - var(--sf-gap) / 2);
 }
 
-.sf-flaps .sf-flap {
+/* The falling flap, over the halves at rest. SplitFlapCell animates it from script (see
+   FlapDrum); a whole-value flap, inside .sf-flaps, by the animations below. */
+.sf-flap {
   z-index: 2;
 }
 
