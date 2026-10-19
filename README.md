@@ -26,6 +26,18 @@ Screens that should make the flap sound unattended need the browser to allow sou
 tap: set the site's Sound permission to Allow, or start Edge or Chrome with
 `--autoplay-policy=no-user-gesture-required` (usual for kiosk set-ups).
 
+On Windows, `scripts/start-screen.ps1` does all of that for a screen machine: it opens the screen
+full-screen in its own copy of Edge, with sound allowed and background throttling off, and gives
+that copy's processes priority over other programs (AboveNormal unless told otherwise):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-screen.ps1 -Address http://your-server/screen/KEY
+```
+
+Add `-Priority High` on a machine that only shows the screen, and `-KeepRaising` to catch
+processes Edge starts later, after a reload say. `Get-Help scripts\start-screen.ps1 -Full`
+explains each option. Alt+F4 leaves kiosk mode.
+
 ## Running it
 
 ```sh
