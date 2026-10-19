@@ -67,7 +67,7 @@ export default function ScreenPage() {
   }, [layout?.cell.fontFamily]);
 
   useWakeLock();
-  const onFlap = useSound(layout?.sound);
+  const sound = useSound(layout?.sound);
   const { outerRef, innerRef, scale } = useFitToScreen(board);
 
   // Double-click for full screen. A screen set up properly runs the browser in kiosk mode instead.
@@ -85,9 +85,9 @@ export default function ScreenPage() {
             values={values}
             records={data.rows}
             page={page}
-            onFlap={onFlap}
-            onBeat={onFlap ? (landed, dueAt, ofTotal) => flapSound.beat(landed, dueAt, ofTotal) : undefined}
-            onDotFlips={onFlap ? (delays) => flapSound.dotFlips(delays) : undefined}
+            onFlap={sound?.onFlap}
+            onBeat={sound?.onBeat}
+            onDotFlips={sound?.onDotFlips}
           />
         </div>
       )}
@@ -143,8 +143,15 @@ function useSound(setting: { enabled?: boolean; volume?: number; style?: SoundSt
     return () => flapSound.disable();
   }, [on]);
 
-  return on ? () => flapSound.play() : undefined;
+  // The same functions every time, so passing them down does not make every cell draw again.
+  return on ? SOUND : undefined;
 }
+
+const SOUND = {
+  onFlap: () => flapSound.play(),
+  onBeat: (landed: number, dueAt: number, ofTotal: number) => flapSound.beat(landed, dueAt, ofTotal),
+  onDotFlips: (delays: number[]) => flapSound.dotFlips(delays),
+};
 
 /** Scale the board, keeping its shape, to the largest size that fits the window. */
 function useFitToScreen(trigger: unknown) {

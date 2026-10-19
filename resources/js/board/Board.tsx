@@ -74,6 +74,16 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
     }
   }, [layout]);
 
+  // Where each cell sits, as the same object every time the board is drawn: a new one each
+  // time would make every cell (they are memo'd) draw again whenever the board does, hundreds of
+  // them, even those whose character has not changed.
+  const placeStyles = useRef(new Map<string, CSSProperties>());
+  const placeStyle = (key: string, x: number, y: number): CSSProperties => {
+    let placed = placeStyles.current.get(key);
+    if (!placed) placeStyles.current.set(key, (placed = { gridColumn: x + 1, gridRow: y + 1 }));
+    return placed;
+  };
+
   const gapX = cell.gapX ?? Math.round(cell.width * 0.08);
   const gapY = cell.gapY ?? Math.round(cell.height * 0.12);
   const gridStyle: CSSProperties = {
@@ -94,7 +104,7 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
           width: cell.width,
           height: cell.height,
           color: spec.color,
-          style: { gridColumn: x + 1, gridRow: y + 1 },
+          style: placeStyle(key, x, y),
         };
         switch (spec.type) {
           case "dotmatrix":
