@@ -54,7 +54,7 @@ export default function ScreenPage() {
 
   const layout = board?.layout;
   const data = useBoardData(layout?.dataSource);
-  const page = usePaging(layout?.pageSeconds, layout?.dataSource);
+  const { page, settled } = usePaging(layout?.pageSeconds, layout?.dataSource);
   const values = useMemo(
     () => (layout ? bindFields((layout.fields ?? []).filter((f) => typeof f.text === "string"), data.rows, layout.pageFields ? page : undefined) : {}),
     [layout, data.rows, page]
@@ -85,6 +85,7 @@ export default function ScreenPage() {
             values={values}
             records={data.rows}
             page={page}
+            onSettled={settled}
             onFlap={sound?.onFlap}
             onBeat={sound?.onBeat}
             onDotFlips={sound?.onDotFlips}

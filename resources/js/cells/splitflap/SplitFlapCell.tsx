@@ -15,6 +15,8 @@ export interface SplitFlapCellProps extends CellProps {
   clock?: FlapClock;
   /** Without a clock: called each time a flap lands, e.g. to play the click. */
   onFlap?: () => void;
+  /** With a clock: how many beats to wait before starting to move (rows starting in turn). */
+  startDelay?: number;
   /** The flaps' colour, instead of the usual near-black. Any CSS colour. */
   background?: string;
 }
@@ -39,6 +41,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({
   flipMs = 80,
   clock,
   onFlap,
+  startDelay = 0,
   background,
   className,
   style,
@@ -59,7 +62,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useLayoutEffect(() => {
-    drum.current?.set({ target, stack, flipMs, clock, onFlap });
+    drum.current?.set({ target, stack, flipMs, clock, onFlap, startDelay });
   });
 
   const vars = {
@@ -101,6 +104,7 @@ interface DrumSettings {
   flipMs: number;
   clock?: FlapClock;
   onFlap?: () => void;
+  startDelay?: number;
 }
 
 /**
@@ -172,7 +176,7 @@ class FlapDrum {
     if (clock) {
       if (this.joined !== clock) {
         this.joined = clock;
-        clock.join(this.step);
+        clock.join(this.step, this.settings.startDelay);
       }
     } else if (this.timer === null) {
       this.ownTime();

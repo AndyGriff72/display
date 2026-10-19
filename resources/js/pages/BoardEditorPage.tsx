@@ -10,6 +10,7 @@ import {
   DEFAULT_PAGE_SECONDS,
   DEFAULT_LINE_HEIGHT,
   FINISH_COLOURS,
+  MAX_ROW_DELAY,
   validateLayout,
   type BoardLayout,
   type CellType,
@@ -111,6 +112,7 @@ export default function BoardEditorPage() {
   const [gapY, setGapY] = useState<number | undefined>(undefined);
   const [flipMs, setFlipMs] = useState(80);
   const [flapTiming, setFlapTiming] = useState<FlapTiming>("together");
+  const [rowDelay, setRowDelay] = useState(0);
   const [fontId, setFontId] = useState(FONTS[0].id);
   const [stackName, setStackName] = useState<CharsetName>("standard");
   // Saved with the board: whether it makes the flap sound, here and on screens.
@@ -133,7 +135,7 @@ export default function BoardEditorPage() {
 
   // Move on a page every pageSeconds. Lists only move when they have more records than rows.
   const pageSeconds = typeof shape.pageSeconds === "number" ? shape.pageSeconds : DEFAULT_PAGE_SECONDS;
-  const page = usePaging(shape.pageSeconds, (shape.dataSource ?? "") + "|" + feed);
+  const { page, settled } = usePaging(shape.pageSeconds, (shape.dataSource ?? "") + "|" + feed);
 
   // Each field's text: fixed words as they are, columns in braces filled from the records.
   const boardValues = useMemo(
@@ -199,6 +201,7 @@ export default function BoardEditorPage() {
         stack: CHARSETS[stackName],
         flipMs,
         ...(flapTiming !== "together" ? { flapTiming } : {}),
+        ...(rowDelay > 0 ? { rowDelay } : {}),
         segments,
         ...(finish !== "led" ? { finish } : {}),
         ...(cellType === "text"
@@ -214,7 +217,7 @@ export default function BoardEditorPage() {
           : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -248,6 +251,7 @@ export default function BoardEditorPage() {
     setGapY(cell.gapY);
     setFlipMs(cell.flipMs ?? 80);
     setFlapTiming(cell.flapTiming ?? "together");
+    setRowDelay(cell.rowDelay ?? 0);
     setFontId(FONTS.find((f) => f.family === cell.fontFamily)?.id ?? FONTS[0].id);
     setStackName(
       (Object.keys(CHARSETS) as CharsetName[]).find((k) => cell.stack !== undefined && CHARSETS[k] === normalizeStack(cell.stack)) ??
@@ -445,7 +449,7 @@ export default function BoardEditorPage() {
         {boardNotice && <p className={"notice " + boardNotice.kind}>{boardNotice.text}</p>}
 
         <FitToWidth>
-          <Board layout={layout} values={boardValues} records={records} page={page} onBeat={playBeat} onFlap={playFlap} onDotFlips={playDotFlips} showAreas={showAreas} />
+          <Board layout={layout} values={boardValues} records={records} page={page} onSettled={settled} onBeat={playBeat} onFlap={playFlap} onDotFlips={playDotFlips} showAreas={showAreas} />
         </FitToWidth>
 
         <div className="preview-tools">
@@ -609,6 +613,19 @@ export default function BoardEditorPage() {
                           <option value="independent">Each in its own time</option>
                         </select>
                       </label>
+                      {flapTiming === "together" && (
+                        <label title="Many station boards updated a row at a time, so a change rippled down the board">
+                          Rows start
+                          <select value={rowDelay} onChange={(e) => setRowDelay(Number(e.target.value))}>
+                            <option value={0}>All together</option>
+                            {Array.from({ length: MAX_ROW_DELAY }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n}>
+                                Each {n} beat{n === 1 ? "" : "s"} after the row above
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                     </>
                   )}
                   <label className="check" title="Positions outside every field, list and static area, including gaps between list columns">

@@ -87,6 +87,9 @@ export interface AreaCell extends TextStyle {
 }
 
 export const FLAP_TIMINGS = ["together", "independent"] as const;
+
+/** The most beats a row can start after the row above (see CellSettings.rowDelay). */
+export const MAX_ROW_DELAY = 6;
 export type FlapTiming = (typeof FLAP_TIMINGS)[number];
 
 /** How every cell on the board looks. Settings that do not apply to the cell type are ignored. */
@@ -111,6 +114,12 @@ export interface CellSettings extends TextStyle {
    * change clatters in unison; "independent" lets each cell keep its own time.
    */
   flapTiming?: FlapTiming;
+  /**
+   * Split-flap, with flapTiming "together": how many beats each row starts after the row above,
+   * so a change ripples down the board as many station boards' did; 0 (the default) starts every
+   * row on the same beat. Up to MAX_ROW_DELAY.
+   */
+  rowDelay?: number;
   /** Segment: 7 for digits, 14 for text. */
   segments?: 7 | 14;
   /** Dot matrix and segment: LED (the default), VFD, or lightbulbs (dot matrix only). */
@@ -350,6 +359,9 @@ export function validateLayout(layout: BoardLayout): string[] {
   }
   errors.push(...finishProblems("The board's cells", cell?.finish, cell?.type));
   errors.push(...textStyleProblems("The board's cells", cell ?? {}));
+  if (cell?.rowDelay !== undefined && !(Number.isInteger(cell.rowDelay) && cell.rowDelay >= 0 && cell.rowDelay <= MAX_ROW_DELAY)) {
+    errors.push(`The board's cells: rowDelay must be a whole number of beats, from 0 to ${MAX_ROW_DELAY}.`);
+  }
   if (cell?.flapTiming !== undefined && !FLAP_TIMINGS.includes(cell.flapTiming)) {
     errors.push(`The board's cells: flapTiming must be one of ${FLAP_TIMINGS.map((t) => `"${t}"`).join(", ")}.`);
   }

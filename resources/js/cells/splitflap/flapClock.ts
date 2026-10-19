@@ -18,7 +18,8 @@ import { beatTimingOn, ChangeRecorder } from "./beatTiming";
 export type FlapStep = () => boolean;
 
 export class FlapClock {
-  private steps = new Set<FlapStep>();
+  /** The cells moving, and how many beats each still waits before its first step. */
+  private steps = new Map<FlapStep, number>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** When beat 0 was due, in Date.now() time, and the number of the next beat. */
   private startedAt = 0;
@@ -30,18 +31,27 @@ export class FlapClock {
    * @param periodMs one beat: how long a flap takes to fall
    * @param onBeat called after a beat on which flaps landed, with how many, and when the beat
    *   was due (Date.now() time): a moment ago, if the browser ran the timer late
+   * @param onIdle called when the last cell has stopped: the change is over
    */
   constructor(
     readonly periodMs: number,
-    private onBeat: (landed: number, dueAt: number) => void
+    private onBeat: (landed: number, dueAt: number) => void,
+    private onIdle?: () => void
   ) {}
+
+  /** Whether any cell is moving, or waiting to. */
+  get busy(): boolean {
+    return this.steps.size > 0;
+  }
 
   /**
    * A cell starts moving. It takes its first step on the next beat, with every other cell
-   * moving, so cells that start in the same moment stay in step all the way.
+   * moving, so cells that start in the same moment stay in step all the way; or, waiting
+   * `waitBeats` beats first, that many beats later, still in step (rows starting one after
+   * another, say).
    */
-  join(step: FlapStep): void {
-    this.steps.add(step);
+  join(step: FlapStep, waitBeats = 0): void {
+    this.steps.set(step, Math.max(0, Math.round(waitBeats)));
     if (this.timer === null) {
       this.startedAt = Date.now();
       this.beatNumber = 1;
@@ -76,7 +86,11 @@ export class FlapClock {
     const ranAt = Date.now();
     const t0 = performance.now();
     let landed = 0;
-    for (const step of [...this.steps]) if (step()) landed++;
+    for (const [step, wait] of [...this.steps]) {
+      if (!this.steps.has(step)) continue; // left during this beat
+      if (wait > 0) this.steps.set(step, wait - 1);
+      else if (step()) landed++;
+    }
     const t1 = performance.now();
     if (landed > 0) this.onBeat(landed, dueAt);
     this.recorder?.beat(dueAt, ranAt, t1 - t0, performance.now() - t1);
@@ -85,6 +99,7 @@ export class FlapClock {
       this.timer = null;
       this.recorder?.end();
       this.recorder = null;
+      this.onIdle?.();
       return;
     }
     // The next beat on the count; if the browser was so late that beats were missed, the next

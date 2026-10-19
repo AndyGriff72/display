@@ -24,6 +24,7 @@ export interface FlapMotion {
  * @param blank the blank face, where every cell starts
  * @param nextOf the face after a given one, coming round to the first after the last
  * @param onFlap without a clock: called each time a flap lands
+ * @param startDelay with a clock: beats to wait before starting to move
  */
 export function useFlapMotion(
   blank: string,
@@ -31,7 +32,8 @@ export function useFlapMotion(
   nextOf: (face: string) => string,
   flipMs: number,
   clock?: FlapClock,
-  onFlap?: () => void
+  onFlap?: () => void,
+  startDelay = 0
 ): FlapMotion {
   // Starts on the blank, as a board does when it is switched on.
   const [shown, setShown] = useState(blank);
@@ -70,7 +72,7 @@ export function useFlapMotion(
       setFlipping(s.flipping);
       return landed;
     };
-    clock.join(step);
+    clock.join(step, startDelay);
     return () => clock.leave(step);
     // Joins when the cell starts moving and leaves when it stops; the step reads the rest.
     // eslint-disable-next-line react-hooks/exhaustive-deps

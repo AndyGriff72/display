@@ -79,4 +79,41 @@ describe("FlapClock", () => {
     expect(beats).toEqual([1]);
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("starts a cell that waits some beats that many beats later, still on the beat", () => {
+    const beats: number[] = [];
+    const clock = new FlapClock(80, (landed) => beats.push(landed));
+    const drums = [drum("B"), drum("B")];
+    drums.forEach((d, row) => {
+      const step = () => {
+        const landed = beatStep(d);
+        if (!d.flipping && d.shown === d.target) clock.leave(step);
+        return landed;
+      };
+      clock.join(step, row * 2);
+    });
+    vi.advanceTimersByTime(80 * 7);
+    expect(drums.map((d) => d.shown)).toEqual(["B", "B"]);
+    // Row 0 lands on beats 2 and 3; row 1, two beats later, on 4 and 5.
+    expect(beats).toEqual([1, 1, 1, 1]);
+  });
+
+  it("says when it is busy, and when the last cell has stopped", () => {
+    let idle = 0;
+    const clock = new FlapClock(80, () => {}, () => idle++);
+    expect(clock.busy).toBe(false);
+    const d = drum("A");
+    const step = () => {
+      const landed = beatStep(d);
+      if (!d.flipping && d.shown === d.target) clock.leave(step);
+      return landed;
+    };
+    clock.join(step, 1);
+    expect(clock.busy).toBe(true);
+    vi.advanceTimersByTime(80 * 2);
+    expect(idle).toBe(0);
+    vi.advanceTimersByTime(80 * 2);
+    expect(clock.busy).toBe(false);
+    expect(idle).toBe(1);
+  });
 });

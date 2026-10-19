@@ -30,6 +30,8 @@ export interface WholeValueFlapProps {
   clock?: FlapClock;
   /** Without a clock: called each time a flap lands. */
   onFlap?: () => void;
+  /** With a clock: beats to wait before starting to move (rows starting in turn). */
+  startDelay?: number;
   style?: CSSProperties;
 }
 
@@ -59,11 +61,12 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   fit = "contain",
   clock,
   onFlap,
+  startDelay = 0,
   style,
 }: WholeValueFlapProps) {
   const target = faces[faceFor(value, faces, images)] ?? "";
   const nextOf = useCallback((face: string) => faces[(faceFor(face, faces, images) + 1) % faces.length] ?? "", [faces, images]);
-  const motion = useFlapMotion("", target, nextOf, flipMs, clock, onFlap);
+  const motion = useFlapMotion("", target, nextOf, flipMs, clock, onFlap, startDelay);
 
   const padding = Math.round(cellWidth * 0.25);
   const sizes = useFittedSizes(images ? [] : faces, fontFamily, Math.round(cellHeight * 0.7), width - 2 * padding);
