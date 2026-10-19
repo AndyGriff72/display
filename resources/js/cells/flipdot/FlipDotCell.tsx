@@ -1,13 +1,11 @@
-import { memo, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { DOT_COLUMNS, DOT_ROWS, dotGlyph } from "../dotmatrix/font5x7";
+import { memo, useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
+import { dotGlyph } from "../dotmatrix/font5x7";
+import type { MotionTracker } from "../splitflap/flapClock";
 import type { CellProps } from "../types";
+import { FlipDotPainter } from "./flipDotPainter";
 import "./FlipDotCell.css";
 
-/** How long one disc takes to turn over, in milliseconds. */
-export const FLIP_MS = 140;
-
-/** The delay between one column of discs and the next, as the sign's controller sweeps across. */
-export const SWEEP_STEP_MS = 7;
+export { FLIP_MS, SWEEP_STEP_MS } from "./flipDotPainter";
 
 export interface FlipDotCellProps extends CellProps {
   /** The colour of the discs' dark side. Defaults to a near-black just lighter than the board. */
@@ -16,9 +14,9 @@ export interface FlipDotCellProps extends CellProps {
   sweepIndex?: number;
   /** Called when discs start to turn, with the delay in milliseconds of each column that turns. */
   onFlip?: (delaysMs: number[]) => void;
+  /** Told when the cell starts and stops turning, so the board knows when it is still. */
+  tracker?: MotionTracker;
 }
-
-const DOTS = DOT_COLUMNS * DOT_ROWS;
 
 function litDots(char: string): boolean[] {
   return dotGlyph(char).flatMap((row) => [...row].map((d) => d === "#"));
@@ -29,6 +27,9 @@ function litDots(char: string): boolean[] {
  * the character changes, only the discs that differ turn over, sweeping across from left to
  * right as a real sign's controller works through its columns. It starts with every disc dark
  * and turns up to its first character, as a sign does when switched on.
+ *
+ * Drawn on a canvas, not as 35 elements (see FlipDotPainter): React draws the cell once, and
+ * the painter does the rest.
  */
 export const FlipDotCell = memo(function FlipDotCell({
   char,
@@ -38,52 +39,44 @@ export const FlipDotCell = memo(function FlipDotCell({
   background = "#1c1c1c",
   sweepIndex = 0,
   onFlip,
+  tracker,
   className,
   style,
 }: FlipDotCellProps) {
   const target = useMemo(() => litDots(char), [char]);
-  // What the discs show, which of them turned last time, and a count that restarts their animation.
-  const [shown, setShown] = useState(() => ({ lit: Array<boolean>(DOTS).fill(false), turned: Array<boolean>(DOTS).fill(false), turn: 0 }));
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const painter = useRef<FlipDotPainter | null>(null);
+  const trackerRef = useRef(tracker);
+  trackerRef.current = tracker;
   const onFlipRef = useRef(onFlip);
   onFlipRef.current = onFlip;
+  const look = { width, height, color, background, sweepIndex };
+
+  // The painter is made once, with the cell.
+  useLayoutEffect(() => {
+    const me = {};
+    const p = new FlipDotPainter(canvas.current!, look, (moving) => trackerRef.current?.set(me, moving));
+    painter.current = p;
+    return () => {
+      p.dispose();
+      painter.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useLayoutEffect(() => {
-    const turned = target.map((on, i) => on !== shown.lit[i]);
-    if (!turned.some(Boolean)) return;
-    setShown((s) => ({ lit: target, turned, turn: s.turn + 1 }));
-    const columns = new Set<number>();
-    turned.forEach((t, i) => t && columns.add(i % DOT_COLUMNS));
-    onFlipRef.current?.([...columns].map((c) => (sweepIndex * DOT_COLUMNS + c) * SWEEP_STEP_MS));
+    painter.current?.setLook(look);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, height, color, background, sweepIndex]);
+
+  useLayoutEffect(() => {
+    const delays = painter.current?.show(target) ?? [];
+    if (delays.length) onFlipRef.current?.(delays);
   }, [target]);
 
-  // The discs sit on an even pitch, centred in the cell.
-  const pitch = Math.min(width / DOT_COLUMNS, height / DOT_ROWS);
-  const vars = {
-    width,
-    height,
-    "--fd-pitch": `${pitch}px`,
-    "--fd-dot": `${pitch * 0.86}px`,
-    "--fd-on": color,
-    "--fd-off": background,
-    "--fd-ms": `${FLIP_MS}ms`,
-    ...style,
-  } as CSSProperties;
-
   return (
-    <div className={`fd-cell${className ? ` ${className}` : ""}`} style={vars} aria-label={char}>
-      {shown.lit.map((on, i) => {
-        const turning = shown.turned[i];
-        const column = i % DOT_COLUMNS;
-        return (
-          <span
-            // A new key each turn restarts the disc's animation.
-            key={turning ? `${i}-${shown.turn}` : i}
-            className={`fd-dot${on ? " fd-on" : ""}${turning ? " fd-turn" : ""}`}
-            style={turning ? ({ "--fd-delay": `${(sweepIndex * DOT_COLUMNS + column) * SWEEP_STEP_MS}ms` } as CSSProperties) : undefined}
-          />
-        );
-      })}
+    <div className={`fd-cell${className ? ` ${className}` : ""}`} style={{ width, height, ...style } as CSSProperties} aria-label={char}>
+      <canvas ref={canvas} className="fd-canvas" style={{ width, height }} aria-hidden />
     </div>
   );
 });

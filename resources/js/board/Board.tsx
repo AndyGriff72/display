@@ -154,7 +154,7 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
           case "segment":
             return <SegmentCell key={key} {...common} segments={spec.segments} finish={spec.finish} />;
           case "flipdot":
-            return <FlipDotCell key={key} {...common} background={spec.background} sweepIndex={x} onFlip={onDotFlips} />;
+            return <FlipDotCell key={key} {...common} background={spec.background} sweepIndex={x} onFlip={onDotFlips} tracker={tracker} />;
           default:
             return (
               <SplitFlapCell
