@@ -141,6 +141,15 @@ export interface CellSettings extends TextStyle {
    * on boards whose modules had to return home before each change.
    */
   clearRows?: boolean;
+  /**
+   * Dot matrix and segments: print characters one at a time, with a cursor just ahead (a block,
+   * or a dash on segments), a row printing again from the left whenever it changes.
+   */
+  printOut?: boolean;
+  /** With printOut: how long each character takes to print, in milliseconds. Defaults to 20. */
+  printMs?: number;
+  /** With printOut: "together" (the default), changing rows print at once; "inTurn", one after another. */
+  printRows?: "together" | "inTurn";
   /** Segment: 7 for digits, 14 for text. */
   segments?: 7 | 14;
   /** Dot matrix and segment: LED (the default), VFD, or lightbulbs (dot matrix only). */
@@ -416,7 +425,13 @@ export function validateLayout(layout: BoardLayout): string[] {
   if (cell?.turnBy !== undefined && !TURN_BYS.includes(cell.turnBy)) {
     errors.push(`The board's cells: turnBy must be one of ${TURN_BYS.map((t) => `"${t}"`).join(", ")}.`);
   }
-  for (const key of ["rowsInTurn", "clearRows"] as const) {
+  if (cell?.printMs !== undefined && !(typeof cell.printMs === "number" && cell.printMs >= 1 && cell.printMs <= 1000)) {
+    errors.push("The board's cells: printMs must be a number of milliseconds, from 1 to 1000.");
+  }
+  if (cell?.printRows !== undefined && cell.printRows !== "together" && cell.printRows !== "inTurn") {
+    errors.push(`The board's cells: printRows must be "together" or "inTurn".`);
+  }
+  for (const key of ["rowsInTurn", "clearRows", "printOut"] as const) {
     if (cell?.[key] !== undefined && typeof cell[key] !== "boolean") errors.push(`The board's cells: ${key} must be true or false, without quotes.`);
   }
   if (cell?.flapTiming !== undefined && !FLAP_TIMINGS.includes(cell.flapTiming)) {

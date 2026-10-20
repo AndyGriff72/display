@@ -29,6 +29,7 @@ import { OptionalColour, StaticAreasPanel } from "./StaticAreasPanel";
 import { CELL_LOOKS, lookById, lookId } from "./cellLooks";
 import { AreasEditor } from "./editor/AreasEditor";
 import { TextStyleButtons } from "./editor/TextStyleButtons";
+import { DEFAULT_PRINT_MS } from "../cells/printing";
 import { rememberBoard, setUnsavedChangesCheck } from "../editorNavigation";
 
 /** Each cell type starts in the colour it is best known in. */
@@ -117,6 +118,10 @@ export default function BoardEditorPage() {
   const [rowsInTurn, setRowsInTurn] = useState(false);
   const [turnBy, setTurnBy] = useState<TurnBy>("row");
   const [clearRows, setClearRows] = useState(false);
+  // Lit cells printing one character at a time (see printing.tsx).
+  const [printOut, setPrintOut] = useState(false);
+  const [printMs, setPrintMs] = useState(DEFAULT_PRINT_MS);
+  const [printRows, setPrintRows] = useState<"together" | "inTurn">("together");
   const [fontId, setFontId] = useState(FONTS[0].id);
   const [stackName, setStackName] = useState<CharsetName>("standard");
   // Saved with the board: whether it makes the flap sound, here and on screens.
@@ -210,6 +215,7 @@ export default function BoardEditorPage() {
         ...(flapTiming !== "together" ? { flapTiming } : {}),
         ...(rowsInTurn ? { rowsInTurn, ...(turnBy !== "row" ? { turnBy } : {}) } : rowDelay > 0 ? { rowDelay } : {}),
         ...(clearRows ? { clearRows } : {}),
+        ...(printOut ? { printOut, ...(printMs !== DEFAULT_PRINT_MS ? { printMs } : {}), ...(printRows !== "together" ? { printRows } : {}) } : {}),
         segments,
         ...(finish !== "led" ? { finish } : {}),
         ...(cellType === "text"
@@ -225,7 +231,7 @@ export default function BoardEditorPage() {
           : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, rowsInTurn, turnBy, clearRows, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, rowsInTurn, turnBy, clearRows, printOut, printMs, printRows, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -263,6 +269,9 @@ export default function BoardEditorPage() {
     setRowsInTurn(cell.rowsInTurn === true);
     setTurnBy(cell.turnBy ?? "row");
     setClearRows(cell.clearRows === true);
+    setPrintOut(cell.printOut === true);
+    setPrintMs(cell.printMs ?? DEFAULT_PRINT_MS);
+    setPrintRows(cell.printRows ?? "together");
     setFontId(FONTS.find((f) => f.family === cell.fontFamily)?.id ?? FONTS[0].id);
     setStackName(
       (Object.keys(CHARSETS) as CharsetName[]).find((k) => cell.stack !== undefined && CHARSETS[k] === normalizeStack(cell.stack)) ??
@@ -571,6 +580,26 @@ export default function BoardEditorPage() {
                       ))}
                     </span>
                   </label>
+                  {usesLitCells(cellType, shape) && (
+                    <>
+                      <label className="check" title="Characters appear one at a time, with a cursor just ahead: a block on dot matrix, a dash on segments">
+                        <input type="checkbox" checked={printOut} onChange={(e) => setPrintOut(e.target.checked)} />
+                        Print characters one at a time (LED, VFD and lightbulb cells)
+                      </label>
+                      {printOut && (
+                        <>
+                          <Slider label="Print speed" unit=" ms a character" value={printMs} min={5} max={200} step={5} onChange={setPrintMs} />
+                          <label>
+                            Rows that change print
+                            <select value={printRows} onChange={(e) => setPrintRows(e.target.value as "together" | "inTurn")}>
+                              <option value="together">Together</option>
+                              <option value="inTurn">One after another</option>
+                            </select>
+                          </label>
+                        </>
+                      )}
+                    </>
+                  )}
                   {cellType === "segment" && (
                     <label>
                       Segments
@@ -880,4 +909,16 @@ function DataStatus({ data, name, missing }: { data: ReturnType<typeof useBoardD
       )}
     </div>
   );
+}
+
+/** Whether a board has lit cells (dot matrix or segments) anywhere: its own, or an area's. */
+function usesLitCells(boardType: CellType, shape: LayoutShape): boolean {
+  const lit = (t?: string) => t === "dotmatrix" || t === "segment";
+  if (lit(boardType)) return true;
+  const cells = [
+    ...(shape.fields ?? []).map((f) => f.cell?.type),
+    ...(shape.lists ?? []).flatMap((l) => (Array.isArray(l.columns) ? l.columns.map((c) => c.cell?.type) : [])),
+    ...(shape.cards ?? []).flatMap((c) => (Array.isArray(c.parts) ? c.parts.map((p) => p.cell?.type) : [])),
+  ];
+  return cells.some(lit);
 }

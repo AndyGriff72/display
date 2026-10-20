@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { enableBeatTiming } from "../cells/splitflap/beatTiming";
+import { DEFAULT_PRINT_MS, PrintedCell, printPlan } from "../cells/printing";
 import { FlapClock, MotionTracker } from "../cells/splitflap/flapClock";
 import { DotMatrixCell } from "../cells/dotmatrix/DotMatrixCell";
 import { FlipDotCell } from "../cells/flipdot/FlipDotCell";
@@ -114,6 +115,40 @@ export function Board({ layout: given, values: givenValues, records = [], page =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, given]);
   const images = useMemo(() => imageAreas(layout, values, records, page), [layout, values, records, page]);
+
+  // Lit cells printing their characters one at a time (see printing.tsx): each row's printing
+  // cells left to right, which rows have just changed, and when each cell prints.
+  const printing = layout.cell.printOut === true;
+  const printMs = layout.cell.printMs ?? DEFAULT_PRINT_MS;
+  const printedRows = useMemo(() => {
+    if (!printing) return null;
+    const rows = new Map<number, { key: string; char: string; x: number }[]>();
+    for (const [key, ch] of cells) {
+      const type = specs.get(key)?.type;
+      if (type !== "dotmatrix" && type !== "segment") continue;
+      const [x, y] = key.split(",").map(Number);
+      let row = rows.get(y);
+      if (!row) rows.set(y, (row = []));
+      row.push({ key, char: ch, x });
+    }
+    for (const row of rows.values()) row.sort((a, b) => a.x - b.x);
+    return rows;
+  }, [printing, cells, specs]);
+  const printKeys = useMemo(
+    () => new Map([...(printedRows ?? new Map<number, { char: string }[]>())].map(([y, row]) => [y, row.map((c) => c.char).join("")])),
+    [printedRows]
+  );
+  // The rows as last drawn, to tell which have just changed (updated once drawn, not while drawing).
+  const printedBefore = useRef(new Map<number, string>());
+  const printSteps = useMemo(() => {
+    if (!printedRows) return null;
+    const changed = new Set([...printKeys].filter(([y, k]) => printedBefore.current.get(y) !== k).map(([y]) => y));
+    return printPlan(printedRows, printKeys, changed, printMs, layout.cell.printRows === "inTurn");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printedRows, printKeys, printMs, layout.cell.printRows]);
+  useEffect(() => {
+    printedBefore.current = printKeys;
+  }, [printKeys]);
   const fields = useMemo(
     // Outlines: fields and lists as given, and each card of each card list.
     () =>
@@ -168,8 +203,11 @@ export function Board({ layout: given, values: givenValues, records = [], page =
         };
         switch (spec.type) {
           case "dotmatrix":
+            if (printSteps) return <PrintedCell key={key} kind="dotmatrix" {...common} finish={spec.finish} step={printSteps.get(key)} printMs={printMs} tracker={tracker} />;
             return <DotMatrixCell key={key} {...common} finish={spec.finish} />;
           case "segment":
+            if (printSteps)
+              return <PrintedCell key={key} kind="segment" {...common} segments={spec.segments} finish={spec.finish} step={printSteps.get(key)} printMs={printMs} tracker={tracker} />;
             return <SegmentCell key={key} {...common} segments={spec.segments} finish={spec.finish} />;
           case "flipdot":
             return <FlipDotCell key={key} {...common} background={spec.background} sweepIndex={x} onFlip={onDotFlips} tracker={tracker} />;
