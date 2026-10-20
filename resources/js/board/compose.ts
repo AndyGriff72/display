@@ -8,6 +8,7 @@
  */
 
 import { pageOffset, renderTemplate, type Row } from "./binding";
+import { plainText } from "./plainText";
 import {
   areaHeight,
   areaWidth,
@@ -207,6 +208,9 @@ export function cellSpecs(layout: BoardLayout): Map<string, CellSpec> {
  * in a single-row field it is cut off. Whatever does not fit in the area's height is dropped.
  *
  * A list shows the data's records, one per row, starting from page `page` (see pageOffset).
+ *
+ * Text is made plain first (see plainText), since character cells cannot show curly quotes or
+ * accents.
  */
 export function composeBoard(
   layout: BoardLayout,
@@ -225,7 +229,8 @@ export function composeBoard(
     if (!rect) continue;
     const width = areaWidth(rect);
     const height = areaHeight(rect);
-    const text = (values[field.id] ?? "").split("\n");
+    // Character cells show what their flaps or font have: see plainText.
+    const text = plainText(values[field.id] ?? "").split("\n");
     const lines = (height > 1 ? text.flatMap((line) => wrapLine(line, width)) : text).slice(0, height);
     lines.forEach((line, row) => {
       const aligned = alignLine(line, width, field.align ?? "left");
@@ -273,7 +278,7 @@ export function listLines(list: ListArea, rect: Rect, records: Row[], page: numb
   const lines: string[] = [];
   if (list.header) lines.push(line(list.columns.map((c) => c.title ?? "")));
   for (const record of pageOfRecords(list, rect, records, page)) {
-    lines.push(record ? line(list.columns.map((c) => renderTemplate(String(c.text ?? ""), record))) : " ".repeat(width));
+    lines.push(record ? line(list.columns.map((c) => plainText(renderTemplate(String(c.text ?? ""), record)))) : " ".repeat(width));
   }
   return lines;
 }
