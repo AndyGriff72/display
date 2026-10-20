@@ -53,8 +53,8 @@ export default function ScreenPage() {
   }, [key]);
 
   const layout = board?.layout;
-  const data = useBoardData(layout?.dataSource);
-  const { page, settled } = usePaging(layout?.pageSeconds, layout?.dataSource);
+  const data = useBoardData(layout?.dataSource, layout?.dataFeed);
+  const { page, settled } = usePaging(layout?.pageSeconds, `${layout?.dataSource}|${layout?.dataFeed}`);
   const values = useMemo(
     () => (layout ? bindFields((layout.fields ?? []).filter((f) => typeof f.text === "string"), data.rows, layout.pageFields ? page : undefined) : {}),
     [layout, data.rows, page]

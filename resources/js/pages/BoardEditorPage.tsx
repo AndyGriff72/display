@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { useNavigate, useParams } from "react-router-dom";
 import { deleteBoard, getBoard, listBoards, saveBoard, type BoardSummary } from "../api/boards";
 import { apiError } from "../api/client";
-import { listDataSources, type SavedDataSource } from "../api/dataSources";
+import { feedSite, listDataSources, type SavedDataSource } from "../api/dataSources";
 import { DEFAULT_SOUND_STYLE, flapSound, SOUND_STYLE_LABELS, SOUND_STYLES, type SoundStyle } from "../audio/flapSound";
 import { bindFields, templateColumns, type Row } from "../board/binding";
 import { Board } from "../board/Board";
@@ -129,7 +129,7 @@ export default function BoardEditorPage() {
       .catch(() => setDataSources([]));
   }, []);
 
-  const data = useBoardData(shape.dataSource);
+  const data = useBoardData(shape.dataSource, shape.dataFeed);
   const source = dataSources.find((s) => s.uuid === shape.dataSource);
   const records: Row[] = shape.dataSource ? data.rows : feed === BUILT_IN ? SAMPLE_RECORDS : [];
   const fields = shape.fields ?? [];
@@ -137,7 +137,7 @@ export default function BoardEditorPage() {
 
   // Move on a page every pageSeconds. Lists only move when they have more records than rows.
   const pageSeconds = typeof shape.pageSeconds === "number" ? shape.pageSeconds : DEFAULT_PAGE_SECONDS;
-  const { page, settled } = usePaging(shape.pageSeconds, (shape.dataSource ?? "") + "|" + feed);
+  const { page, settled } = usePaging(shape.pageSeconds, `${shape.dataSource ?? ""}|${shape.dataFeed ?? ""}|${feed}`);
 
   // Each field's text: fixed words as they are, columns in braces filled from the records.
   const boardValues = useMemo(
@@ -164,20 +164,22 @@ export default function BoardEditorPage() {
     setJsonError(null);
   };
 
+  // A data source's key, or for one feed of a news feed source, "key#n" (see BoardLayout.dataFeed).
   const chooseFeed = (value: string) => {
-    const { dataSource: _old, ...rest } = shape;
+    const { dataSource: _old, dataFeed: _oldFeed, ...rest } = shape;
     if (value === BUILT_IN || value === NO_DATA) {
       setFeed(value);
       replaceShape(rest);
     } else {
-      replaceShape({ ...rest, dataSource: value });
+      const [uuid, one] = value.split("#");
+      replaceShape({ ...rest, dataSource: uuid, ...(one !== undefined ? { dataFeed: Number(one) } : {}) });
     }
   };
 
   const loadSample = (id: string) => {
     const sample = SAMPLES.find((s) => s.id === id);
     if (!sample) return;
-    replaceShape(shape.dataSource ? { ...sample.layout, dataSource: shape.dataSource } : sample.layout);
+    replaceShape(shape.dataSource ? { ...sample.layout, dataSource: shape.dataSource, ...(shape.dataFeed !== undefined ? { dataFeed: shape.dataFeed } : {}) } : sample.layout);
     setCellWidth(sample.cellWidth);
     setCellHeight(sample.cellHeight);
     changeLook(lookId(sample.cellType ?? "splitflap", sample.finish));
@@ -661,14 +663,26 @@ export default function BoardEditorPage() {
                   <legend>Data</legend>
                   <label>
                     Data
-                    <select value={shape.dataSource ?? feed} onChange={(e) => chooseFeed(e.target.value)}>
+                    <select
+                      value={shape.dataSource ? shape.dataSource + (shape.dataFeed !== undefined ? `#${shape.dataFeed}` : "") : feed}
+                      onChange={(e) => chooseFeed(e.target.value)}
+                    >
                       <option value={BUILT_IN}>Built-in sample departures</option>
                       <option value={NO_DATA}>No data</option>
-                      {dataSources.map((ds) => (
+                      {dataSources.flatMap((ds) => [
                         <option key={ds.uuid} value={ds.uuid}>
                           {ds.name}
-                        </option>
-                      ))}
+                          {ds.kind === "rss" && ds.feeds.length > 1 ? " (all feeds)" : ""}
+                        </option>,
+                        // A news feed source with several feeds: each of them on its own too.
+                        ...(ds.kind === "rss" && ds.feeds.length > 1
+                          ? ds.feeds.map((f, i) => (
+                              <option key={`${ds.uuid}#${i}`} value={`${ds.uuid}#${i}`}>
+                                {ds.name}: {f.name || feedSite(f.url)} only
+                              </option>
+                            ))
+                          : []),
+                      ])}
                       {shape.dataSource && !source && <option value={shape.dataSource}>Unknown data source</option>}
                     </select>
                   </label>

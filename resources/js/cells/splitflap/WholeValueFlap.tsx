@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { faceFor } from "../../board/compose";
+import { IMAGE_REFERRER } from "../../board/images";
 import type { FlapClock, MotionTracker } from "./flapClock";
 import { flapShades } from "./SplitFlapCell";
 import { useFlapMotion } from "./useFlapMotion";
@@ -84,7 +85,7 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   const coming = flipping ? motion.next : current;
   const glyph = (face: string): CSSProperties =>
     images ? { padding: Math.round(cellHeight * 0.08) } : { fontSize: sizes.get(face), textAlign: align, padding: `0 ${padding}px` };
-  const draw = (face: string) => (images ? face && <img src={face} alt="" style={{ objectFit: fit }} /> : face);
+  const draw = (face: string) => (images ? face && <img src={face} alt="" referrerPolicy={IMAGE_REFERRER} style={{ objectFit: fit }} /> : face);
 
   const vars = {
     "--sf-w": `${width}px`,

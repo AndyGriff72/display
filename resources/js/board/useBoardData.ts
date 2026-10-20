@@ -22,8 +22,10 @@ const RETRY_SECONDS = 15;
 /**
  * A data source's rows, fetched now and again every refreshSeconds (as the server says). A
  * failed fetch keeps the rows already on the board rather than blanking it.
+ *
+ * @param feed for a news feed source with several feeds: just this one (see BoardLayout.dataFeed)
  */
-export function useBoardData(key: string | undefined): BoardDataState {
+export function useBoardData(key: string | undefined, feed?: number): BoardDataState {
   const [state, setState] = useState<BoardDataState>(EMPTY);
 
   useEffect(() => {
@@ -37,7 +39,8 @@ export function useBoardData(key: string | undefined): BoardDataState {
     const fetchOnce = async () => {
       let next = RETRY_SECONDS;
       try {
-        const { data } = await api.get(`/board-data/${encodeURIComponent(key)}`, { signal: controller.signal });
+        const query = feed !== undefined ? `?feed=${feed}` : "";
+        const { data } = await api.get(`/board-data/${encodeURIComponent(key)}${query}`, { signal: controller.signal });
         if (cancelled) return;
         setState({
           rows: data.data,
@@ -63,7 +66,7 @@ export function useBoardData(key: string | undefined): BoardDataState {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [key]);
+  }, [key, feed]);
 
   return state;
 }

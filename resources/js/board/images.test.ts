@@ -41,8 +41,14 @@ describe("imageSource", () => {
     expect(imageSource(svg)).toBe("data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg));
   });
 
+  it("takes web addresses as they are, unless told not to (where an address is more likely a link)", () => {
+    expect(imageSource("https://news.example/pic.jpg")).toBe("https://news.example/pic.jpg");
+    expect(imageSource(" http://news.example/pic ")).toBe("http://news.example/pic");
+    expect(imageSource("https://news.example/pic.jpg", false)).toBeNull();
+  });
+
   it("refuses anything else", () => {
-    for (const v of ["AVANTI", "", null, 42, "data:text/html,<script>", "https://example.com/logo.png", "<div><svg/></div>"]) {
+    for (const v of ["AVANTI", "", null, 42, "data:text/html,<script>", "javascript:alert(1)", "ftp://example.com/a.png", "https://a b.png", "<div><svg/></div>"]) {
       expect(imageSource(v)).toBeNull();
     }
   });

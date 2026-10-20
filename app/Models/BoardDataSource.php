@@ -7,14 +7,16 @@ use Illuminate\Support\Str;
 
 /**
  * A saved query for a board: one table, tables joined in the join builder, or a SELECT written by
- * the admin; see DataSourceQuery for how each kind runs.
+ * the admin (see DataSourceQuery for how each kind runs); or news feeds, merged (see NewsFeeds).
  *
  * @property string $uuid
  * @property string $name
- * @property string $kind "table", "join" or "sql"
+ * @property string $kind "table", "join", "sql" or "rss"
  * @property string $table_name
  * @property list<array{table: string, type: string, from: string, to: string}>|null $joins
  * @property string|null $sql
+ * @property list<array{url: string, name: ?string}>|null $feeds
+ * @property string|null $timezone
  * @property list<string> $columns
  * @property list<array{column: string, operator: string, valueKind: string, value: ?string}> $filters
  * @property list<array{column: string, direction: string}> $sort
@@ -29,6 +31,8 @@ class BoardDataSource extends Model
         'table_name',
         'joins',
         'sql',
+        'feeds',
+        'timezone',
         'columns',
         'filters',
         'sort',
@@ -39,6 +43,7 @@ class BoardDataSource extends Model
     protected $casts = [
         'columns' => 'array',
         'joins' => 'array',
+        'feeds' => 'array',
         'filters' => 'array',
         'sort' => 'array',
         'row_limit' => 'integer',
@@ -55,7 +60,7 @@ class BoardDataSource extends Model
     /**
      * The query as plain data, the form DataSourceQuery runs.
      *
-     * @return array{kind: string, table: string, joins: list<array>, sql: ?string, columns: list<string>, filters: list<array>, sort: list<array>, limit: int}
+     * @return array{kind: string, table: string, joins: list<array>, sql: ?string, feeds: list<array>, timezone: ?string, columns: list<string>, filters: list<array>, sort: list<array>, limit: int}
      */
     public function definition(): array
     {
@@ -64,6 +69,8 @@ class BoardDataSource extends Model
             'table' => $this->table_name,
             'joins' => $this->joins ?? [],
             'sql' => $this->sql,
+            'feeds' => $this->feeds ?? [],
+            'timezone' => $this->timezone,
             'columns' => $this->columns ?? [],
             'filters' => $this->filters ?? [],
             'sort' => $this->sort ?? [],

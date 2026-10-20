@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Data\DataSourceQuery;
+use App\Data\FeedProblem;
 use App\Data\InvalidDataSource;
+use App\Data\NewsFeeds;
 use App\Data\TargetDatabases;
 use App\Models\BoardDataSource;
 use Illuminate\Database\QueryException;
@@ -14,11 +16,15 @@ use Illuminate\Http\Request;
  * Setting up data sources: list, preview, save, remove.
  *
  * A data source is only saved once it fits the connected database — the table and every column
- * exist — so a screen never fetches a definition that cannot run.
+ * exist — so a screen never fetches a definition that cannot run. A news feed source is only
+ * saved once at least one of its feeds can be fetched and read; it needs no database at all.
  */
 class DataSourceController extends Controller
 {
-    public function __construct(private TargetDatabases $databases)
+    /** News feeds are checked at least this often apart, in seconds: feed sites expect polite polling. */
+    private const FEED_MIN_SECONDS = 60;
+
+    public function __construct(private TargetDatabases $databases, private NewsFeeds $feeds)
     {
     }
 
@@ -40,6 +46,10 @@ class DataSourceController extends Controller
     {
         $definition = $this->definition($this->validated($request));
 
+        if ($definition['kind'] === 'rss') {
+            return $this->previewFeeds($definition);
+        }
+
         if (!$database = $this->databases->current()) {
             return $this->refuse('Save a database connection first.', [], 409);
         }
@@ -57,6 +67,47 @@ class DataSourceController extends Controller
         }
 
         return response()->json(['status' => 200, 'data' => $result['rows'], 'columns' => $result['columns'], 'message' => '']);
+    }
+
+    /** A news feed source's stories as they are now: fetched afresh, not from the cache. */
+    private function previewFeeds(array $definition): JsonResponse
+    {
+        if ($problems = $this->feedProblems($definition)) {
+            return $this->refuse($problems[0], $problems);
+        }
+        try {
+            $result = $this->feeds->fetch($definition['feeds'], $definition['timezone'], $definition['limit']);
+        } catch (FeedProblem $e) {
+            return $this->refuse($e->getMessage());
+        }
+
+        return response()->json(['status' => 200, 'data' => $result['rows'], 'columns' => $result['columns'], 'message' => '']);
+    }
+
+    /**
+     * What is wrong with a news feed source as given: feeds, addresses, number of stories.
+     *
+     * @return list<string>
+     */
+    private function feedProblems(array $definition): array
+    {
+        $problems = [];
+        if (!$definition['feeds']) {
+            $problems[] = 'Add at least one feed.';
+        }
+        if (count($definition['feeds']) > NewsFeeds::MAX_FEEDS) {
+            $problems[] = 'A data source can merge up to ' . NewsFeeds::MAX_FEEDS . ' feeds.';
+        }
+        foreach ($definition['feeds'] as $i => $feed) {
+            if ($problem = $this->feeds->addressProblem($feed['url'])) {
+                $problems[] = 'Feed ' . ($i + 1) . ": {$problem}";
+            }
+        }
+        if ($definition['limit'] < 1 || $definition['limit'] > NewsFeeds::MAX_STORIES) {
+            $problems[] = 'Keep between 1 and ' . NewsFeeds::MAX_STORIES . ' stories.';
+        }
+
+        return $problems;
     }
 
     public function store(Request $request): JsonResponse
@@ -80,6 +131,10 @@ class DataSourceController extends Controller
     {
         $input = $this->validated($request);
         $definition = $this->definition($input);
+
+        if ($definition['kind'] === 'rss') {
+            return $this->saveFeeds($input, $definition, $source);
+        }
 
         if (!$database = $this->databases->current()) {
             return $this->refuse('Save a database connection first.', [], 409);
@@ -111,9 +166,44 @@ class DataSourceController extends Controller
             'table_name' => $definition['table'],
             'joins' => $definition['kind'] === 'join' ? $definition['joins'] : null,
             'sql' => $definition['kind'] === 'sql' ? $definition['sql'] : null,
+            'feeds' => null,
+            'timezone' => null,
             'columns' => $definition['columns'],
             'filters' => $definition['filters'],
             'sort' => $definition['sort'],
+            'row_limit' => $definition['limit'],
+            'cache_seconds' => $input['cacheSeconds'],
+        ])->save();
+
+        return response()->json(['status' => 200, 'data' => $this->present($source), 'message' => 'Data source saved.']);
+    }
+
+    /** A news feed source, saved once at least one of its feeds can be fetched and read. */
+    private function saveFeeds(array $input, array $definition, BoardDataSource $source): JsonResponse
+    {
+        if ($problems = $this->feedProblems($definition)) {
+            return $this->refuse($problems[0], $problems);
+        }
+        if (($input['cacheSeconds'] ?? 0) < self::FEED_MIN_SECONDS) {
+            return $this->refuse('Check news feeds at most once a minute: feed sites expect polite polling.');
+        }
+        try {
+            $this->feeds->fetch($definition['feeds'], $definition['timezone'], $definition['limit']);
+        } catch (FeedProblem $e) {
+            return $this->refuse($e->getMessage());
+        }
+
+        $source->fill([
+            'name' => $input['name'],
+            'kind' => 'rss',
+            'table_name' => '',
+            'joins' => null,
+            'sql' => null,
+            'feeds' => $definition['feeds'],
+            'timezone' => $definition['timezone'],
+            'columns' => NewsFeeds::COLUMNS,
+            'filters' => [],
+            'sort' => [],
             'row_limit' => $definition['limit'],
             'cache_seconds' => $input['cacheSeconds'],
         ])->save();
@@ -125,15 +215,19 @@ class DataSourceController extends Controller
     {
         return $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'kind' => ['sometimes', 'in:table,join,sql'],
-            'table' => ['required_unless:kind,sql', 'nullable', 'string', 'max:255'],
+            'kind' => ['sometimes', 'in:table,join,sql,rss'],
+            'table' => ['required_unless:kind,sql,rss', 'nullable', 'string', 'max:255'],
             'joins' => ['sometimes', 'array', 'max:10'],
             'joins.*.table' => ['required', 'string', 'max:255'],
             'joins.*.type' => ['required', 'string'],
             'joins.*.from' => ['required', 'string', 'max:511'],
             'joins.*.to' => ['required', 'string', 'max:255'],
             'sql' => ['required_if:kind,sql', 'nullable', 'string'],
-            'columns' => ['required_unless:kind,sql', 'array', 'max:50'],
+            'feeds' => ['required_if:kind,rss', 'array', 'max:' . NewsFeeds::MAX_FEEDS],
+            'feeds.*.url' => ['required', 'string', 'max:2048'],
+            'feeds.*.name' => ['nullable', 'string', 'max:100'],
+            'timezone' => ['required_if:kind,rss', 'nullable', 'timezone:all'],
+            'columns' => ['required_unless:kind,sql,rss', 'array', 'max:50'],
             'columns.*' => ['string', 'max:511'],
             'filters' => ['sometimes', 'array', 'max:20'],
             'filters.*.column' => ['required', 'string', 'max:255'],
@@ -150,6 +244,9 @@ class DataSourceController extends Controller
             'columns.required_unless' => 'Choose at least one column.',
             'table.required_unless' => 'Choose a table.',
             'sql.required_if' => 'Write the SELECT that gives the board its rows.',
+            'feeds.required_if' => 'Add at least one feed.',
+            'feeds.*.url.required' => 'Give every feed its address.',
+            'timezone.timezone' => 'Choose a time zone from the list.',
             'cacheSeconds.between' => 'Refresh between every 5 seconds and once an hour.',
         ]);
     }
@@ -160,7 +257,16 @@ class DataSourceController extends Controller
         $kind = $input['kind'] ?? 'table';
         if ($kind === 'sql') {
             // Written SQL does its own choosing, joining, filtering and sorting.
-            return ['kind' => 'sql', 'table' => '', 'joins' => [], 'sql' => (string) $input['sql'], 'columns' => [], 'filters' => [], 'sort' => [], 'limit' => (int) $input['limit']];
+            return ['kind' => 'sql', 'table' => '', 'joins' => [], 'sql' => (string) $input['sql'], 'feeds' => [], 'timezone' => null, 'columns' => [], 'filters' => [], 'sort' => [], 'limit' => (int) $input['limit']];
+        }
+        if ($kind === 'rss') {
+            // News feeds: each story is a row, with the same columns whatever the feed.
+            $feeds = array_values(array_map(fn ($f) => [
+                'url' => trim($f['url']),
+                'name' => isset($f['name']) && trim($f['name']) !== '' ? trim($f['name']) : null,
+            ], $input['feeds'] ?? []));
+
+            return ['kind' => 'rss', 'table' => '', 'joins' => [], 'sql' => null, 'feeds' => $feeds, 'timezone' => $input['timezone'] ?? config('app.timezone'), 'columns' => NewsFeeds::COLUMNS, 'filters' => [], 'sort' => [], 'limit' => (int) $input['limit']];
         }
 
         return [
@@ -173,6 +279,8 @@ class DataSourceController extends Controller
                 'to' => $j['to'],
             ], $input['joins'] ?? [])) : [],
             'sql' => null,
+            'feeds' => [],
+            'timezone' => null,
             'columns' => array_values($input['columns']),
             'filters' => array_values(array_map(fn ($f) => [
                 'column' => $f['column'],
@@ -204,6 +312,8 @@ class DataSourceController extends Controller
             'table' => $source->table_name,
             'joins' => $source->joins ?? [],
             'sql' => $source->sql,
+            'feeds' => $source->feeds ?? [],
+            'timezone' => $source->timezone,
             'columns' => $source->columns,
             'filters' => $source->filters,
             'sort' => $source->sort,

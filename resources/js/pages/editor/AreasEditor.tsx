@@ -233,7 +233,7 @@ export function AreasEditor(props: AreasEditorProps) {
 /** What a field shows now, in a few words: an image's source is far too long to print. */
 function showingNow(value: string | undefined): string {
   if (!value) return "nothing";
-  return imageSource(value) ? "an image" : `"${value}"`;
+  return imageSource(value, false) ? "an image" : `"${value}"`;
 }
 
 const FITS: { value: NonNullable<ImageValue["fit"]>; label: string }[] = [

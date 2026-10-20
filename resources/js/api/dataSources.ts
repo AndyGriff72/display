@@ -37,8 +37,14 @@ export interface Sort {
   direction: "asc" | "desc";
 }
 
-/** One table, tables joined in the join builder, or a SELECT written by hand. */
-export type DataSourceKind = "table" | "join" | "sql";
+/** One table, tables joined in the join builder, a SELECT written by hand, or news feeds. */
+export type DataSourceKind = "table" | "join" | "sql" | "rss";
+
+/** A news feed: its address, and a name for it (otherwise the feed's own title). */
+export interface Feed {
+  url: string;
+  name: string | null;
+}
 
 /** A table joined on: rows where `from` (an earlier table's "table.column") equals this table's `to` column. */
 export interface Join {
@@ -64,6 +70,10 @@ export interface DataSourceDefinition {
   table: string;
   joins: Join[];
   sql: string | null;
+  /** For news feeds: the feeds, merged newest first. */
+  feeds: Feed[];
+  /** For news feeds: the time zone story times are shown in. */
+  timezone: string | null;
   columns: string[];
   filters: Filter[];
   sort: Sort[];
@@ -79,6 +89,15 @@ export interface SavedDataSource extends DataSourceDefinition {
 }
 
 export type Row = Record<string, string | number | null>;
+
+/** A feed's address, shortened to its site, for lists. */
+export function feedSite(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
 
 export async function listTables(): Promise<TableInfo[]> {
   const { data } = await api.get<ApiResponse<TableInfo[]>>("/schema/tables");

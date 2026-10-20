@@ -278,6 +278,11 @@ export interface BoardLayout {
   /** The key of the data source the board's fields and lists read from, if any. */
   dataSource?: string;
   /**
+   * For a news feed data source with several feeds: just this one of them (counting from 0),
+   * rather than all of them merged.
+   */
+  dataFeed?: number;
+  /**
    * When there are more records than a list has rows for, the list moves on to the next
    * page of records this often, looping back to the first. 0 keeps the first page up.
    * Defaults to DEFAULT_PAGE_SECONDS.

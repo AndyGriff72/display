@@ -14,6 +14,8 @@ import {
   type ColumnInfo,
   type DataSourceDefinition,
   type DataSourceKind,
+  type Feed,
+  feedSite,
   type Filter,
   type ForeignKey,
   type Join,
@@ -43,7 +45,20 @@ const KINDS: { value: DataSourceKind; label: string; hint: string }[] = [
   { value: "table", label: "One table", hint: "Rows from a single table or view." },
   { value: "join", label: "Joined tables", hint: "Start from one table and bring in matching rows from others." },
   { value: "sql", label: "Your own SQL", hint: "A SELECT written in your database's own SQL." },
+  { value: "rss", label: "News feeds (RSS)", hint: "Stories from one or more news feeds, newest first. Needs no database." },
 ];
+
+/** The time zone of this computer: where story times are shown, unless chosen otherwise. */
+const LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London";
+
+/** Every time zone the browser knows, for choosing one. */
+const ZONES: string[] = (() => {
+  try {
+    return (Intl as unknown as { supportedValuesOf(key: string): string[] }).supportedValuesOf("timeZone");
+  } catch {
+    return [LOCAL_ZONE, "UTC"];
+  }
+})();
 
 const BLANK: DataSourceDefinition = {
   name: "",
@@ -51,6 +66,8 @@ const BLANK: DataSourceDefinition = {
   table: "",
   joins: [],
   sql: null,
+  feeds: [],
+  timezone: null,
   columns: [],
   filters: [],
   sort: [],
@@ -61,17 +78,18 @@ const BLANK: DataSourceDefinition = {
 type Notice = { kind: "ok" | "error"; text: string; problems?: string[] } | null;
 
 function definitionOf(s: SavedDataSource): DataSourceDefinition {
-  const { name, kind, table, joins, sql, columns, filters, sort, limit, cacheSeconds } = s;
-  return { name, kind: kind ?? "table", table, joins: joins ?? [], sql: sql ?? null, columns, filters, sort, limit, cacheSeconds };
+  const { name, kind, table, joins, sql, feeds, timezone, columns, filters, sort, limit, cacheSeconds } = s;
+  return { name, kind: kind ?? "table", table, joins: joins ?? [], sql: sql ?? null, feeds: feeds ?? [], timezone: timezone ?? null, columns, filters, sort, limit, cacheSeconds };
 }
 
 function describe(s: SavedDataSource): string {
+  if (s.kind === "rss") return (s.feeds ?? []).map((f) => f.name || feedSite(f.url)).join(" + ") || "news feeds";
   if (s.kind === "sql") return "your own SQL";
   if (s.kind === "join") return [s.table, ...(s.joins ?? []).map((j) => j.table)].join(" + ");
   return s.table;
 }
 
-/** Choose what a board shows: rows from one table, from joined tables, or from your own SQL. */
+/** Choose what a board shows: rows from one table, from joined tables, from your own SQL, or stories from news feeds. */
 export default function DataSourcesPage() {
   const [tables, setTables] = useState<TableInfo[] | null>(null);
   const [foreignKeys, setForeignKeys] = useState<ForeignKey[]>([]);
@@ -82,15 +100,20 @@ export default function DataSourcesPage() {
   const [preview, setPreview] = useState<{ columns: string[]; rows: Row[] } | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // No database connection (or one that cannot be reached): news feeds still work.
+  const [noDatabase, setNoDatabase] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    Promise.all([listTables(), listDataSources()])
-      .then(([t, s]) => {
-        setTables(t);
-        setSources(s);
-      })
+    listDataSources()
+      .then(setSources)
       .catch((e) => setLoadError(apiError(e).message));
+    listTables()
+      .then(setTables)
+      .catch((e) => {
+        setTables([]);
+        setNoDatabase(apiError(e).message);
+      });
     listForeignKeys()
       .then(setForeignKeys)
       .catch(() => setForeignKeys([]));
@@ -141,6 +164,10 @@ export default function DataSourcesPage() {
       if (d.kind === "join" && kind === "table" && d.joins.length === 0) {
         const plain = (c: string) => c.slice(c.lastIndexOf(".") + 1);
         return { ...d, kind, columns: d.columns.map(plain), filters: d.filters.map((f) => ({ ...f, column: plain(f.column) })), sort: d.sort.map((s) => ({ ...s, column: plain(s.column) })) };
+      }
+      if (kind === "rss") {
+        // Feeds: at least a minute between checks, and story times in this computer's time zone.
+        return { ...d, kind, joins: [], columns: [], filters: [], sort: [], feeds: d.feeds.length ? d.feeds : [{ url: "", name: null }], timezone: d.timezone ?? LOCAL_ZONE, limit: Math.max(d.limit, 20), cacheSeconds: Math.max(d.cacheSeconds, 300) };
       }
       return { ...d, kind, joins: [], columns: [], filters: [], sort: [], sql: kind === "sql" ? (d.sql ?? "") : d.sql };
     });
@@ -257,7 +284,9 @@ export default function DataSourcesPage() {
   }
   if (!tables) return <main className="page">Loading…</main>;
 
-  const ready = draft.kind === "sql" ? !!draft.sql?.trim() : !!draft.table;
+  const feeds = draft.kind === "rss";
+  const ready = feeds ? draft.feeds.some((f) => f.url.trim()) : draft.kind === "sql" ? !!draft.sql?.trim() : !!draft.table;
+  const setFeed = (i: number, patch: Partial<Feed>) => set("feeds", draft.feeds.map((f, j) => (j === i ? { ...f, ...patch } : f)));
   const columnSelect = (value: string, onChange: (v: string) => void, label: string) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
       {!refs.includes(value) && <option value={value}>{value || "Choose…"}</option>}
@@ -270,7 +299,7 @@ export default function DataSourcesPage() {
   return (
     <main className="page wide-page">
       <h1>Data sources</h1>
-      <p className="lede">What a board shows: rows from the connected database.</p>
+      <p className="lede">What a board shows: rows from the connected database, or stories from news feeds.</p>
       <p className="hint">
         Choosing a data source here only opens it for editing. To show one on a board, pick it in the board editor under{" "}
         <strong>Board › Data</strong>, then save the board. <Link to={lastBoardPath()}>Open boards</Link>
@@ -307,7 +336,55 @@ export default function DataSourcesPage() {
             ))}
           </div>
 
-          {draft.kind === "sql" ? (
+          {feeds ? (
+            <>
+              <fieldset className="wide">
+                <legend>Feeds</legend>
+                <p className="hint">
+                  The address of each RSS or Atom feed. Stories from all of them are merged, newest first; a board can also show just one of
+                  them. Give a feed a name to use instead of its own title.
+                </p>
+                {draft.feeds.map((f, i) => (
+                  <div className="row-editor" key={i}>
+                    <input
+                      value={f.url}
+                      onChange={(e) => setFeed(i, { url: e.target.value })}
+                      placeholder="https://feeds.example.com/news.rss"
+                      aria-label="Feed address"
+                      size={46}
+                    />
+                    <input
+                      value={f.name ?? ""}
+                      onChange={(e) => setFeed(i, { name: e.target.value || null })}
+                      placeholder="Name (optional)"
+                      aria-label="Feed name"
+                      size={16}
+                    />
+                    <button className="icon" title="Remove this feed" onClick={() => set("feeds", draft.feeds.filter((_, j) => j !== i))} disabled={draft.feeds.length === 1}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {draft.feeds.length < 10 && <button onClick={() => set("feeds", [...draft.feeds, { url: "", name: null }])}>+ Add a feed</button>}
+              </fieldset>
+              <label className="wide">
+                <span>
+                  Show story times in <span className="hint">feeds give times in all sorts of zones; they are converted to this one</span>
+                </span>
+                <select value={draft.timezone ?? LOCAL_ZONE} onChange={(e) => set("timezone", e.target.value)}>
+                  {ZONES.map((z) => (
+                    <option key={z} value={z}>
+                      {z.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : noDatabase ? (
+            <p className="notice error wide">
+              {noDatabase} <Link to="/connection">Set up the database connection</Link> to use tables or SQL; news feeds work without one.
+            </p>
+          ) : draft.kind === "sql" ? (
             <label className="wide">
               <span>
                 SELECT <span className="hint">in your database's own SQL. Name columns with AS to use them in templates, e.g. {"{due}"}.</span>
@@ -339,7 +416,7 @@ export default function DataSourcesPage() {
             </label>
           )}
 
-          {joined && draft.table && (
+          {!feeds && joined && draft.table && (
             <fieldset className="wide">
               <legend>Joined tables</legend>
               {draft.joins.length === 0 && <p className="hint">None yet.</p>}
@@ -392,7 +469,7 @@ export default function DataSourcesPage() {
             </fieldset>
           )}
 
-          {draft.kind !== "sql" && draft.table && (
+          {!feeds && draft.kind !== "sql" && draft.table && (
             <>
               <fieldset className="wide">
                 <legend>Columns</legend>
@@ -480,15 +557,15 @@ export default function DataSourcesPage() {
             <>
               <label>
                 <span>
-                  Rows <span className="hint">up to 100</span>
+                  {feeds ? "Stories" : "Rows"} <span className="hint">up to {feeds ? 200 : 100}</span>
                 </span>
-                <input type="number" min={1} max={100} value={draft.limit} onChange={(e) => set("limit", Number(e.target.value))} />
+                <input type="number" min={1} max={feeds ? 200 : 100} value={draft.limit} onChange={(e) => set("limit", Number(e.target.value))} />
               </label>
               <label>
                 <span>
                   Check for new data every <span className="hint">seconds</span>
                 </span>
-                <input type="number" min={5} max={3600} value={draft.cacheSeconds} onChange={(e) => set("cacheSeconds", Number(e.target.value))} />
+                <input type="number" min={feeds ? 60 : 5} max={3600} value={draft.cacheSeconds} onChange={(e) => set("cacheSeconds", Number(e.target.value))} />
               </label>
             </>
           )}
@@ -548,7 +625,7 @@ export default function DataSourcesPage() {
                     {preview.rows.map((row, i) => (
                       <tr key={i}>
                         {preview.columns.map((c) => (
-                          <td key={c}>{previewValue(row[c])}</td>
+                          <td key={c}>{previewValue(row[c], c)}</td>
                         ))}
                       </tr>
                     ))}
@@ -563,9 +640,13 @@ export default function DataSourcesPage() {
   );
 }
 
-/** A value in the preview table: an image as a small picture, nothing as a hint, the rest as text. */
-function previewValue(value: Row[string]) {
+/**
+ * A value in the preview table: an image as a small picture, nothing as a hint, the rest as text.
+ * A web address is only shown as a picture in a column called "image" (as news feeds give):
+ * elsewhere it is more likely a link to a page.
+ */
+function previewValue(value: Row[string], column: string) {
   if (value === null) return <span className="hint">no value</span>;
-  const src = imageSource(value);
-  return src ? <img className="preview-image" src={src} alt="an image" /> : String(value);
+  const src = imageSource(value, column === "image");
+  return src ? <img className="preview-image" src={src} alt="an image" referrerPolicy="no-referrer" /> : String(value);
 }

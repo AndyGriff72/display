@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Data\BoardData;
 use App\Models\BoardDataSource;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * The rows a screen shows, in Redbrix's envelope:
@@ -24,7 +25,7 @@ class BoardDataController extends Controller
     {
     }
 
-    public function show(string $uuid): JsonResponse
+    public function show(Request $request, string $uuid): JsonResponse
     {
         $source = BoardDataSource::where('uuid', $uuid)->first();
 
@@ -33,7 +34,9 @@ class BoardDataController extends Controller
         }
 
         try {
-            $result = $this->data->for($source);
+            // ?feed=N: for a news feed source, just its Nth feed (from 0), as a board can choose.
+            $feed = $request->query('feed');
+            $result = $this->data->for($source, is_numeric($feed) ? (int) $feed : null);
         } catch (\Throwable) {
             return response()->json([
                 'status' => 503,

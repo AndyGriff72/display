@@ -22,6 +22,7 @@ import {
   type WholeValueFlap as Flap,
 } from "./compose";
 import { parseArea, type BoardLayout, type Rect, type StaticArea } from "./layout";
+import { IMAGE_REFERRER } from "./images";
 import { TimingReadout } from "./TimingReadout";
 import "./Board.css";
 
@@ -205,7 +206,7 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
       })}
       {images.map((im) => (
         <div key={im.key} className="board-value-image" style={gridArea(im.rect)}>
-          {im.src && <img src={im.src} alt="" style={{ objectFit: im.fit }} />}
+          {im.src && <img src={im.src} alt="" referrerPolicy={IMAGE_REFERRER} style={{ objectFit: im.fit }} />}
         </div>
       ))}
       {texts.map((t) => (
@@ -222,7 +223,7 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
             border: s.border ? `${s.borderWidth ?? 1}px solid ${s.border}` : undefined,
           }}
         >
-          {s.image && <img className="board-static-image" src={s.image} alt="" style={{ objectFit: s.fit ?? "contain" }} />}
+          {s.image && <img className="board-static-image" src={s.image} alt="" referrerPolicy={IMAGE_REFERRER} style={{ objectFit: s.fit ?? "contain" }} />}
           {typeof s.text === "string" && s.text !== "" && <StaticText area={s} rect={s.rect} board={layout} />}
           {showAreas && <span className="board-area-label">{s.id}</span>}
         </div>

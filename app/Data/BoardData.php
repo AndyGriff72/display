@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Log;
  * database has a bad moment.
  *
  * Every screen showing a board asks for its data on a timer. The result is reused for the data
- * source's cache_seconds, so ten screens cost the database one query per period, not ten.
+ * source's cache_seconds, so ten screens cost the database one query per period, not ten (or,
+ * for news feeds, the feeds' sites one fetch).
  *
  * The last good result is also kept for a day. If the database cannot be reached, screens get
  * that, marked stale, rather than a blank board — a departures board that goes dark because the
@@ -21,28 +22,30 @@ class BoardData
 {
     private const LAST_GOOD_SECONDS = 86400;
 
-    public function __construct(private TargetDatabases $databases)
+    public function __construct(private TargetDatabases $databases, private NewsFeeds $feeds)
     {
     }
 
     /**
      * @return array{columns: list<string>, rows: list<array<string, mixed>>, fetchedAt: string, stale: bool}
      *
+     * @param  int|null  $feed  for news feeds: just this one of them (counting from 0), not all merged
+     *
      * @throws \Throwable when the data cannot be fetched and there is no earlier result to fall back on
      */
-    public function for(BoardDataSource $source): array
+    public function for(BoardDataSource $source, ?int $feed = null): array
     {
+        $definition = $source->definition();
+        if ($definition['kind'] !== 'rss' || $feed === null || !isset($definition['feeds'][$feed])) {
+            $feed = null;
+        }
         // The definition is part of the key, so editing a data source takes effect at once.
-        $key = 'board-data:' . $source->id . ':' . md5(json_encode($source->definition()));
-        $lastGoodKey = 'board-data-last-good:' . $source->id;
+        $key = 'board-data:' . $source->id . ':' . md5(json_encode($definition)) . ($feed !== null ? ":feed{$feed}" : '');
+        $lastGoodKey = 'board-data-last-good:' . $source->id . ($feed !== null ? ":feed{$feed}" : '');
 
         try {
-            return Cache::remember($key, max(1, $source->cache_seconds), function () use ($source, $lastGoodKey) {
-                $database = $this->databases->current()
-                    ?? throw new \RuntimeException('No database connection has been saved.');
-
-                $result = (new DataSourceQuery($database))->run($source->definition())
-                    + ['fetchedAt' => now()->toIso8601String(), 'stale' => false];
+            return Cache::remember($key, max(1, $source->cache_seconds), function () use ($definition, $feed, $lastGoodKey) {
+                $result = $this->fetch($definition, $feed) + ['fetchedAt' => now()->toIso8601String(), 'stale' => false];
 
                 Cache::put($lastGoodKey, $result, self::LAST_GOOD_SECONDS);
 
@@ -58,5 +61,24 @@ class BoardData
 
             throw $e;
         }
+    }
+
+    /**
+     * Run a definition: news feeds fetched, or a query against the connected database.
+     *
+     * @return array{columns: list<string>, rows: list<array<string, mixed>>}
+     */
+    public function fetch(array $definition, ?int $feed = null): array
+    {
+        if ($definition['kind'] === 'rss') {
+            $feeds = $feed !== null ? [$definition['feeds'][$feed]] : $definition['feeds'];
+
+            return $this->feeds->fetch($feeds, $definition['timezone'] ?: config('app.timezone'), $definition['limit']);
+        }
+
+        $database = $this->databases->current()
+            ?? throw new \RuntimeException('No database connection has been saved.');
+
+        return (new DataSourceQuery($database))->run($definition);
     }
 }
