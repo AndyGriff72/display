@@ -71,6 +71,14 @@ const SYNTH_RATE = { from: 1.52, spread: 0.16 };
  */
 const RECORDED_RATE = { from: 0.97, spread: 0.06 };
 
+/**
+ * The loudest a beat's sound may peak (full scale is 1, before the volume setting). Busy beats
+ * are dense, so they sound louder than their peak suggests, and each overlaps the next (a beat's
+ * sound outlasts the beat), so they are held well below full scale. A beat of a few flaps peaks
+ * far lower than this and is not affected.
+ */
+const BEAT_PEAK_MOST = 0.3;
+
 /** The prepared recordings (see scripts/prepare-flap-sounds.py), served as they are. */
 const FLAPS_URL = "/sounds/flaps.wav";
 const CLATTER_URL = "/sounds/clatter.wav";
@@ -107,7 +115,7 @@ class FlapSound {
    * Beats mixed in advance (see premixBeats), by how many flaps each holds (BEAT_TIERS), a few
    * of each; empty until they are ready, when beats are mixed as they play instead.
    */
-  private premixed = new Map<number, AudioBuffer[]>();
+  private premixed = new Map<number, { buffer: AudioBuffer; peak: number }[]>();
   /** Counts the times the flap sound changed, so a mix started for an old one is thrown away. */
   private soundVersion = 0;
 
@@ -225,11 +233,11 @@ class FlapSound {
     const sources = recorded ? this.flaps : this.synthesised;
     if (sources.length === 0) return;
     const rate = recorded ? RECORDED_RATE : SYNTH_RATE;
-    const mixed = new Map<number, AudioBuffer[]>();
+    const mixed = new Map<number, { buffer: AudioBuffer; peak: number }[]>();
     try {
       for (const flaps of BEAT_TIERS) {
         const { spreadMs } = beatSound(tierLanded(flaps));
-        const versions: AudioBuffer[] = [];
+        const versions: { buffer: AudioBuffer; peak: number }[] = [];
         for (let v = 0; v < PREMIXED_VERSIONS; v++) {
           // A busy beat is partly the real sound of many flaps falling together.
           const clatter = recorded && this.clatter.length > 0 ? clatterShare(flaps) : 0;
@@ -260,7 +268,8 @@ class FlapSound {
             source.connect(level).connect(offline.destination);
             source.start(x.at);
           }
-          versions.push(await offline.startRendering());
+          const buffer = await offline.startRendering();
+          versions.push({ buffer, peak: peakOf(buffer) });
         }
         mixed.set(flaps, versions);
       }
@@ -389,11 +398,13 @@ class FlapSound {
     const at = Math.max(ctx.currentTime, ctx.currentTime + BEAT_LATENCY + (dueAt - Date.now()) / 1000);
     const ready = this.premixed.get(beatTier(voices));
     if (ready) {
-      // One ready-made beat of about this many flaps, at this beat's loudness.
+      // One ready-made beat of about this many flaps, at this beat's loudness, but never so loud
+      // that its peak passes BEAT_PEAK_MOST: busy beats are dense, and overlap the next.
+      const { buffer, peak } = ready[Math.floor(Math.random() * ready.length)];
       const source = ctx.createBufferSource();
-      source.buffer = ready[Math.floor(Math.random() * ready.length)];
+      source.buffer = buffer;
       const level = ctx.createGain();
-      level.gain.value = gain * Math.sqrt(voices);
+      level.gain.value = Math.min(gain * Math.sqrt(voices), BEAT_PEAK_MOST / Math.max(peak, 1e-6));
       source.connect(level).connect(this.output);
       source.start(at);
       return;
@@ -508,6 +519,13 @@ function slots(ctx: AudioContext, buffer: AudioBuffer, slotMs: number): AudioBuf
     for (let c = 0; c < buffer.numberOfChannels; c++) slot.getChannelData(c).set(buffer.getChannelData(c).subarray(i * length, (i + 1) * length));
     return slot;
   });
+}
+
+/** A buffer's loudest moment, across its channels. */
+function peakOf(buffer: AudioBuffer): number {
+  let peak = 0;
+  for (let c = 0; c < buffer.numberOfChannels; c++) for (const v of buffer.getChannelData(c)) peak = Math.max(peak, Math.abs(v));
+  return peak;
 }
 
 /** A buffer scaled, every channel alike, so its loudest moment reaches PEAK. */
