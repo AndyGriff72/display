@@ -13,12 +13,13 @@ lawyer. Bundled on that basis: UK protection for a typeface used commercially la
 long past for a 1980 chip, and bitmap character shapes are generally not protected as typefaces
 in the US.
 
-## Flapline (`Flapline-Regular.woff`, `Flapline-Regular.ttf`)
+## Flapline (`Flapline-Regular.woff2`, `.woff`, `.ttf`)
 
 Condensed monospaced capitals in the style of 1970s-80s split-flap departure boards, version
 1.000. An original design created for Andy Griffith in 2026 for this project, so there is no
 outside licence to follow; its embedding setting allows use on web pages.
 
-The WOFF is the one browsers load (the same font, compressed); the TTF is there as a fallback.
+Browsers load the WOFF2 (the same font, most compressed); the WOFF and TTF are fallbacks for older
+browsers.
 It has letters (both cases), digits and common punctuation, but no "&", although the standard
 flap stack has one: a board showing "&" in Flapline takes it from the next font in line.

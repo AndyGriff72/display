@@ -15,7 +15,7 @@
  */
 @font-face {
   font-family: "Flapline";
-  src: url("../../fonts/Flapline-Regular.woff") format("woff"), url("../../fonts/Flapline-Regular.ttf") format("truetype");
+  src: url("../../fonts/Flapline-Regular.woff2") format("woff2"), url("../../fonts/Flapline-Regular.woff") format("woff"), url("../../fonts/Flapline-Regular.ttf") format("truetype");
   font-display: swap;
 }
 

@@ -77,7 +77,7 @@ const RECORDED_RATE = { from: 0.97, spread: 0.06 };
  * sound outlasts the beat), so they are held well below full scale. A beat of a few flaps peaks
  * far lower than this and is not affected.
  */
-const BEAT_PEAK_MOST = 0.3;
+const BEAT_PEAK_MOST = 0.2;
 
 /** The prepared recordings (see scripts/prepare-flap-sounds.py), served as they are. */
 const FLAPS_URL = "/sounds/flaps.wav";
