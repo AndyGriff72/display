@@ -6,14 +6,16 @@
  * of a few hundred cells can land thousands a second, and playing every one would be both
  * deafening and expensive, so landings closer together than MIN_GAP_MS are dropped (see play).
  *
- * The default is a recording of a real mechanism (resources/wav/split-flap.wav). The
+ * The default is recordings of a real display: separate flaps (public/sounds/flaps.wav), and
+ * beats of many flaps falling together (public/sounds/clatter.wav), both prepared from the
+ * recordings in resources/wav by scripts/prepare-flap-sounds.py. A beat is made of the separate
+ * flaps, with the real clatter blended in the more flaps land together (see premixBeats). The
  * synthesised styles in clickSynth.ts remain as alternatives.
  */
 
-import recordingUrl from "../../wav/split-flap.wav?url";
 import { SYNTH_STYLE_LABELS, SYNTH_STYLES, synthesiseClickSamples, synthesiseDotTickSamples, type SynthStyle } from "./clickSynth";
 
-/** Every sound a board can choose: the recording first, then the synthesised ones. */
+/** Every sound a board can choose: the recordings first, then the synthesised ones. */
 export const SOUND_STYLES = ["recorded", ...SYNTH_STYLES] as const;
 export type SoundStyle = (typeof SOUND_STYLES)[number];
 
@@ -64,10 +66,23 @@ const VARIANTS = 8;
 const SYNTH_RATE = { from: 1.52, spread: 0.16 };
 
 /**
- * Playback speed for the recording: its own, give or take a little, so no two flaps sound
- * quite alike without the pitch moving away from the real thing.
+ * Playback speed for the recordings: their own, give or take a very little. With several real
+ * flaps to choose from, little variation is needed for no two to sound alike.
  */
-const RECORDED_RATE = { from: 0.94, spread: 0.12 };
+const RECORDED_RATE = { from: 0.97, spread: 0.06 };
+
+/** The prepared recordings (see scripts/prepare-flap-sounds.py), served as they are. */
+const FLAPS_URL = "/sounds/flaps.wav";
+const CLATTER_URL = "/sounds/clatter.wav";
+
+/** Each flap or beat in those files sits in a slot this long: SLOT_MS in the script. */
+const SOUND_SLOT_MS = 150;
+
+/**
+ * How much of a beat is the real clatter of many flaps rather than separate flaps: none for a
+ * beat of four flaps or fewer, rising to this much for the busiest beats.
+ */
+const CLATTER_MOST = 0.7;
 
 /** The level every sound is brought to, so the volume setting means the same for each style. */
 const PEAK = 0.9;
@@ -76,7 +91,9 @@ class FlapSound {
   private ctx: AudioContext | null = null;
   private output: GainNode | null = null;
   private synthesised: AudioBuffer[] = [];
-  private recording: AudioBuffer | null = null;
+  /** Separate real flaps, and beats of many flaps together (see the file comment). */
+  private flaps: AudioBuffer[] = [];
+  private clatter: AudioBuffer[] = [];
   private recordingLoad: Promise<void> | null = null;
   private lastPlayed = 0;
   private enabled = false;
@@ -128,7 +145,7 @@ class FlapSound {
     this.notify();
   }
 
-  /** Which sound flaps make: the recording, or a synthesised style (see clickSynth.ts). */
+  /** Which sound flaps make: the recordings, or a synthesised style (see clickSynth.ts). */
   setStyle(style: SoundStyle): void {
     if (style === this.style) return;
     this.style = style;
@@ -142,7 +159,7 @@ class FlapSound {
   audition(): void {
     const ctx = this.context();
     ctx.resume().catch(() => {});
-    // The recording may still be on its way the very first time: wait for it, then play.
+    // The recordings may still be on their way the very first time: wait for them, then play.
     const ready = this.style === "recorded" ? this.loadRecording(ctx) : Promise.resolve();
     ready.then(() => {
       const start = ctx.currentTime + 0.05;
@@ -204,8 +221,8 @@ class FlapSound {
    * Mixed off to one side (an OfflineAudioContext), faster than real time, once per sound.
    */
   private async premixBeats(ctx: AudioContext, version: number): Promise<void> {
-    const recorded = this.style === "recorded" && this.recording !== null;
-    const sources = recorded ? [this.recording!] : this.synthesised;
+    const recorded = this.style === "recorded" && this.flaps.length > 0;
+    const sources = recorded ? this.flaps : this.synthesised;
     if (sources.length === 0) return;
     const rate = recorded ? RECORDED_RATE : SYNTH_RATE;
     const mixed = new Map<number, AudioBuffer[]>();
@@ -214,13 +231,23 @@ class FlapSound {
         const { spreadMs } = beatSound(tierLanded(flaps));
         const versions: AudioBuffer[] = [];
         for (let v = 0; v < PREMIXED_VERSIONS; v++) {
+          // A busy beat is partly the real sound of many flaps falling together.
+          const clatter = recorded && this.clatter.length > 0 ? clatterShare(flaps) : 0;
           const voices = beatOffsets(flaps, spreadMs).map((offset) => ({
             buffer: sources[Math.floor(Math.random() * sources.length)],
             at: offset / 1000,
             rate: rate.from + Math.random() * rate.spread,
             // The flaps share the beat's loudness, as sounds that do not line up exactly add.
-            gain: (recorded ? 0.8 + Math.random() * 0.2 : 1) / Math.sqrt(flaps),
+            gain: ((recorded ? 0.8 + Math.random() * 0.2 : 1) * (1 - clatter / 2)) / Math.sqrt(flaps),
           }));
+          if (clatter > 0) {
+            voices.push({
+              buffer: this.clatter[Math.floor(Math.random() * this.clatter.length)],
+              at: 0,
+              rate: 0.98 + Math.random() * 0.04,
+              gain: clatter,
+            });
+          }
           const seconds = Math.max(...voices.map((x) => x.at + x.buffer.duration / x.rate));
           const channels = Math.max(...voices.map((x) => x.buffer.numberOfChannels));
           const offline = new OfflineAudioContext(channels, Math.ceil(seconds * ctx.sampleRate), ctx.sampleRate);
@@ -244,16 +271,26 @@ class FlapSound {
     if (version === this.soundVersion) this.premixed = mixed;
   }
 
-  /** Fetch and decode the recording, once, levelled to the same peak as the synthesised sounds. */
+  /**
+   * Fetch and decode the recordings, once, cut into their separate flaps and beats (one per
+   * SOUND_SLOT_MS slot), each levelled to the same peak as the synthesised sounds.
+   */
   private loadRecording(ctx: AudioContext): Promise<void> {
-    this.recordingLoad ??= fetch(recordingUrl)
-      .then((response) => response.arrayBuffer())
-      .then((data) => ctx.decodeAudioData(data))
-      .then((buffer) => {
-        this.recording = levelled(buffer);
+    const load = (url: string) =>
+      fetch(url)
+        .then((response) => {
+          if (!response.ok) throw new Error(`${url}: ${response.status}`);
+          return response.arrayBuffer();
+        })
+        .then((data) => ctx.decodeAudioData(data))
+        .then((buffer) => slots(ctx, buffer, SOUND_SLOT_MS).map(levelled));
+    this.recordingLoad ??= Promise.all([load(FLAPS_URL), load(CLATTER_URL)])
+      .then(([flaps, clatter]) => {
+        this.flaps = flaps;
+        this.clatter = clatter;
       })
       .catch(() => {
-        // Without the recording, fall back to a synthesised slap rather than silence.
+        // Without the recordings, fall back to a synthesised slap rather than silence.
         this.recordingLoad = null;
         this.synthesised = Array.from({ length: VARIANTS }, () => synthesiseClick(ctx, "slap"));
       });
@@ -261,8 +298,9 @@ class FlapSound {
   }
 
   private voice(ctx: AudioContext, at?: number, gain = 1): void {
-    const recorded = this.style === "recorded" && this.recording !== null;
-    const buffer = recorded ? this.recording : this.synthesised[Math.floor(Math.random() * this.synthesised.length)];
+    const recorded = this.style === "recorded" && this.flaps.length > 0;
+    const pool = recorded ? this.flaps : this.synthesised;
+    const buffer = pool[Math.floor(Math.random() * pool.length)];
     if (!buffer) return;
 
     const source = ctx.createBufferSource();
@@ -454,6 +492,22 @@ function synthesiseClick(ctx: AudioContext, style: SynthStyle): AudioBuffer {
   const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
   buffer.getChannelData(0).set(samples);
   return buffer;
+}
+
+/** How much of a beat of `flaps` flaps is the real clatter (see CLATTER_MOST). Exported for the tests. */
+export function clatterShare(flaps: number): number {
+  return Math.min(1, Math.max(0, (flaps - 4) / (BEAT_MAX_VOICES - 4))) * CLATTER_MOST;
+}
+
+/** A recording cut into its slots of `slotMs` each: separate flaps, or beats. */
+function slots(ctx: AudioContext, buffer: AudioBuffer, slotMs: number): AudioBuffer[] {
+  const length = Math.round((buffer.sampleRate * slotMs) / 1000);
+  const count = Math.floor(buffer.length / length);
+  return Array.from({ length: count }, (_, i) => {
+    const slot = ctx.createBuffer(buffer.numberOfChannels, length, buffer.sampleRate);
+    for (let c = 0; c < buffer.numberOfChannels; c++) slot.getChannelData(c).set(buffer.getChannelData(c).subarray(i * length, (i + 1) * length));
+    return slot;
+  });
 }
 
 /** A buffer scaled, every channel alike, so its loudest moment reaches PEAK. */

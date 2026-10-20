@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BEAT_TIERS, beatOffsets, beatSound, beatTier } from "./flapSound";
+import { BEAT_TIERS, beatOffsets, beatSound, beatTier, clatterShare } from "./flapSound";
 
 /** A beat's loudness: each flap's gain times the square root of how many play. */
 const loudness = (landed: number, ofTotal: number) => {
@@ -65,5 +65,15 @@ describe("beatTier", () => {
     const sizes = new Set(Array.from({ length: 400 }, (_, i) => beatSound(i + 1, 400).voices));
     for (const size of sizes) expect(Math.abs(beatTier(size) - size)).toBeLessThanOrEqual(2);
     expect(BEAT_TIERS.at(-1)).toBe(Math.max(...sizes));
+  });
+});
+
+describe("clatterShare", () => {
+  it("leaves small beats as separate flaps and blends in more real clatter the busier the beat", () => {
+    expect([1, 2, 3, 4].map(clatterShare)).toEqual([0, 0, 0, 0]);
+    expect(clatterShare(6)).toBeGreaterThan(0);
+    expect(clatterShare(11)).toBeGreaterThan(clatterShare(6));
+    expect(clatterShare(16)).toBeCloseTo(0.7);
+    expect(clatterShare(100)).toBeCloseTo(0.7);
   });
 });
