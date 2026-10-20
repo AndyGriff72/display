@@ -16,7 +16,9 @@ import {
   imageAreas,
   resolveStaticText,
   textBlocks,
+  turnGroups,
   wholeValueFlaps,
+  withCards,
   type TextBlock,
   type TextSpec,
   type WholeValueFlap as Flap,
@@ -58,7 +60,11 @@ export interface BoardProps {
  * areas laid over it. Everything is placed on the same CSS grid, so an area covers the gaps
  * between the cells it replaces and the board keeps its shape around it.
  */
-export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, onSettled, onDotFlips, showAreas }: BoardProps) {
+export function Board({ layout: given, values: givenValues, records = [], page = 0, onBeat, onFlap, onSettled, onDotFlips, showAreas }: BoardProps) {
+  // Card lists become ordinary fields, each filled from its card's record (see withCards).
+  const expanded = useMemo(() => withCards(given, records, page), [given, records, page]);
+  const layout = expanded.layout;
+  const values = useMemo(() => (expanded.cards.length ? { ...givenValues, ...expanded.values } : givenValues), [givenValues, expanded]);
   const { cell } = layout;
   // ?timing in the address: record how the split-flaps keep time, and show it in a corner.
   const [showTiming] = useState(() => {
@@ -92,7 +98,11 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
   const together = layout.cell.flapTiming !== "independent";
   const rowsInTurn = together && layout.cell.rowsInTurn === true;
   const rowDelay = together && !rowsInTurn ? (layout.cell.rowDelay ?? 0) : 0;
-  const rowKeys = useMemo(() => (layout.cell.clearRows ? rowContents(cells, flaps) : null), [layout.cell.clearRows, cells, flaps]);
+  // What takes its turn (see CellSettings.turnBy), as a number for each position: rows in order,
+  // pairs of rows, or cards (positions in no card going a row at a time). Lower goes first.
+  const turnBy = rowsInTurn ? (layout.cell.turnBy ?? "row") : "row";
+  const groupOf = useMemo(() => turnGroups(turnBy, expanded.cards), [turnBy, expanded.cards]);
+  const rowKeys = useMemo(() => (layout.cell.clearRows ? groupContents(cells, flaps, groupOf) : null), [layout.cell.clearRows, cells, flaps, groupOf]);
   for (const flipMs of new Set([...specs.values(), ...flaps.map((f) => f.spec)].map((s) => s.flipMs))) {
     const clock = clockFor(flipMs);
     if (clock) clock.rowByRow = rowsInTurn;
@@ -102,11 +112,18 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
   useEffect(() => {
     if (!clocks.busy() && !tracker.busy) onSettledRef.current?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, layout]);
+  }, [page, given]);
   const images = useMemo(() => imageAreas(layout, values, records, page), [layout, values, records, page]);
   const fields = useMemo(
-    () => (showAreas ? placedAreas(layout, [...(layout.fields ?? []), ...(layout.lists ?? [])]) : []),
-    [layout, showAreas]
+    // Outlines: fields and lists as given, and each card of each card list.
+    () =>
+      showAreas
+        ? [
+            ...placedAreas(given, [...(given.fields ?? []), ...(given.lists ?? [])]),
+            ...expanded.cards.map((rect, i) => ({ id: `card ${i + 1}`, rect })),
+          ]
+        : [],
+    [given, expanded, showAreas]
   );
 
   // Every typeface the board uses, whichever areas use them.
@@ -167,8 +184,8 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
                 clock={clockFor(spec.flipMs)}
                 tracker={together ? undefined : tracker}
                 startDelay={rowDelay * y}
-                row={y}
-                rowKey={rowKeys?.get(y)}
+                row={groupOf(x, y)}
+                rowKey={rowKeys?.get(groupOf(x, y))}
                 background={spec.background}
                 onFlap={onFlap}
               />
@@ -194,8 +211,8 @@ export function Board({ layout, values, records = [], page = 0, onBeat, onFlap, 
             clock={clockFor(f.spec.flipMs)}
             tracker={together ? undefined : tracker}
             startDelay={rowDelay * f.rect.y1}
-            row={f.rect.y1}
-            rowKey={rowKeys?.get(f.rect.y1)}
+            row={groupOf(f.rect.x1, f.rect.y1)}
+            rowKey={rowKeys?.get(groupOf(f.rect.x1, f.rect.y1))}
             align={f.align}
             images={f.image}
             fit={f.fit}
@@ -284,23 +301,23 @@ function useFlapClocks(
 }
 
 /**
- * What each board row shows, as one string per row: its characters, and the values of any
- * whole-value flaps starting on it. When a row's string changes, a board whose rows clear
- * before changing clears that row (see CellSettings.clearRows).
+ * What each group (see turnGroups) shows, as one string per group: its characters, and the
+ * values of any whole-value flaps starting in it. When a group's string changes, a board whose
+ * rows clear before changing clears that group (see CellSettings.clearRows).
  */
-function rowContents(cells: Map<string, string>, flaps: Flap[]): Map<number, string> {
-  const rows = new Map<number, string[]>();
-  const add = (row: number, part: string) => {
-    let parts = rows.get(row);
-    if (!parts) rows.set(row, (parts = []));
+function groupContents(cells: Map<string, string>, flaps: Flap[], groupOf: (x: number, y: number) => number): Map<number, string> {
+  const groups = new Map<number, string[]>();
+  const add = (group: number, part: string) => {
+    let parts = groups.get(group);
+    if (!parts) groups.set(group, (parts = []));
     parts.push(part);
   };
   for (const [key, ch] of cells) {
-    const [x, y] = key.split(",");
-    add(Number(y), `${x}:${ch}`);
+    const [x, y] = key.split(",").map(Number);
+    add(groupOf(x, y), `${x},${y}:${ch}`);
   }
-  for (const f of flaps) add(f.rect.y1, `${f.key}=${f.value}`);
-  return new Map([...rows].map(([row, parts]) => [row, parts.join("|")]));
+  for (const f of flaps) add(groupOf(f.rect.x1, f.rect.y1), `${f.key}=${f.value}`);
+  return new Map([...groups].map(([group, parts]) => [group, parts.join("|")]));
 }
 
 /** As SplitFlapCell's own default. */

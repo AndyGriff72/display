@@ -1,4 +1,4 @@
-import { columnOffsets, parseArea, type CellType, type FieldArea, type Finish, type ListArea, type ListColumn, type ImageValue, type TextStyle, type WholeValue } from "../../board/layout";
+import { cardRects, cardSize, columnOffsets, parseArea, type CardList, type CardPart, type CellType, type FieldArea, type Finish, type ListArea, type ListColumn, type ImageValue, type TextStyle, type WholeValue } from "../../board/layout";
 import { imageSource } from "../../board/images";
 import { OptionalColour } from "../StaticAreasPanel";
 import { CellStyle, withCell } from "./CellStyle";
@@ -13,6 +13,7 @@ const ALIGNS: { value: "left" | "center" | "right"; label: string }[] = [
 export interface AreasEditorProps {
   fields: FieldArea[];
   lists: ListArea[];
+  cards: CardList[];
   /** The board's size, which positions are kept within. */
   columns: number;
   rows: number;
@@ -26,7 +27,8 @@ export interface AreasEditorProps {
   dataColumns: string[];
   /** What each field shows right now, by id. */
   showing: Record<string, string>;
-  onChange: (next: { fields: FieldArea[]; lists: ListArea[] }) => void;
+  /** Given what changed: fields, lists or card lists. */
+  onChange: (next: { fields?: FieldArea[]; lists?: ListArea[]; cards?: CardList[] }) => void;
 }
 
 /**
@@ -35,10 +37,11 @@ export interface AreasEditorProps {
  *
  * A field is one piece of text: fixed words, or columns from the data in braces. A list shows
  * the data's records one per row, in columns that can start anywhere along it, leaving the space
- * between them bare.
+ * between them bare. A card list shows them one per card: a card designed once, from parts like
+ * fields, repeated over an area.
  */
 export function AreasEditor(props: AreasEditorProps) {
-  const { fields, lists, columns, rows, onChange } = props;
+  const { fields, lists, cards, columns, rows, onChange } = props;
   const style = { boardType: props.boardType, boardFinish: props.boardFinish, boardColour: props.boardColour, cellHeight: props.cellHeight, boardTextStyle: props.boardTextStyle };
 
   const setField = (i: number, patch: Partial<FieldArea>) =>
@@ -47,7 +50,11 @@ export function AreasEditor(props: AreasEditorProps) {
   const setColumn = (l: number, c: number, patch: Partial<ListColumn>) =>
     setList(l, { columns: lists[l].columns.map((col, k) => (k === c ? tidyColumn({ ...col, ...patch }) : col)) });
 
-  const usedIds = new Set([...fields.map((f) => f.id), ...lists.map((l) => l.id)]);
+  const setCards = (i: number, patch: Partial<CardList>) => onChange({ cards: cards.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
+  const setPart = (c: number, p: number, patch: Partial<CardPart>) =>
+    setCards(c, { parts: cards[c].parts.map((part, k) => (k === p ? (tidyField({ ...part, ...patch } as FieldArea) as CardPart) : part)) });
+
+  const usedIds = new Set([...fields.map((f) => f.id), ...lists.map((l) => l.id), ...cards.map((c) => c.id)]);
   const freshId = (base: string) => {
     let n = 1;
     while (usedIds.has(`${base}${n}`)) n++;
@@ -58,6 +65,19 @@ export function AreasEditor(props: AreasEditorProps) {
     onChange({
       fields: [...fields, { id: freshId("field"), area: formatArea({ x1: 0, y1: 0, x2: Math.min(9, columns - 1), y2: 0 }), text: "" }],
       lists,
+    });
+  // A card list over the whole board: cards three rows high, one above another, each with a title.
+  const addCards = () =>
+    onChange({
+      cards: [
+        ...cards,
+        {
+          id: freshId("cards"),
+          area: formatArea({ x1: 0, y1: 0, x2: columns - 1, y2: rows - 1 }),
+          cardHeight: Math.min(3, rows),
+          parts: [{ id: "title", area: formatArea({ x1: 0, y1: 0, x2: columns - 1, y2: 0 }), text: "" }],
+        },
+      ],
     });
   const addList = () =>
     onChange({
@@ -82,55 +102,26 @@ export function AreasEditor(props: AreasEditorProps) {
 
       <h3>Fields</h3>
       {fields.length === 0 && <p className="hint">None yet.</p>}
-      {fields.map((f, i) => {
-        const rect = parseArea(f.area ?? "");
-        const tall = !!rect && rect.y2 > rect.y1;
-        const fromData = typeof f.text === "string" && f.text.includes("{");
-        return (
-          <div className="area-card" key={`f${i}`}>
-            <div className="area-card-head">
-              <input className="area-id" value={f.id} onChange={(e) => setField(i, { id: e.target.value })} aria-label="Field name" />
-              <button className="icon" title="Remove this field" onClick={() => onChange({ fields: fields.filter((_, j) => j !== i), lists })}>
-                ×
-              </button>
-            </div>
-            <PositionFields area={f.area} columns={columns} rows={rows} onChange={(area) => setField(i, { area })} />
-            <label>
-              Shows
-              {tall ? (
-                <textarea rows={2} value={f.text ?? ""} onChange={(e) => setField(i, { text: e.target.value })} placeholder="Words, or {column} from the data" />
-              ) : (
-                <input value={f.text ?? ""} onChange={(e) => setField(i, { text: e.target.value })} placeholder="Words, or {column} from the data" />
-              )}
-            </label>
-            <div className="row-editor">
-              <select value={f.align ?? "left"} onChange={(e) => setField(i, { align: e.target.value as FieldArea["align"] })} aria-label="Alignment">
-                {ALIGNS.map((a) => (
-                  <option key={a.value} value={a.value}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
-              {fromData && (
-                <label className="inline" title="Which record of the data this field shows: 1 is the first">
-                  Record
-                  <input
-                    type="number"
-                    min={1}
-                    value={(f.row ?? 0) + 1}
-                    onChange={(e) => setField(i, { row: Math.max(0, Number(e.target.value) - 1) || undefined })}
-                    style={{ width: 60 }}
-                  />
-                </label>
-              )}
-              <span className="hint">now: {showingNow(props.showing[f.id])}</span>
-            </div>
-            <CellStyle cell={f.cell} {...style} onChange={(cell) => onChange({ fields: fields.map((x, j) => (j === i ? withCell(x, cell) : x)), lists })} />
-            <ImageOption area={f} onChange={(patch) => setField(i, patch)} />
-            {(f.cell?.type ?? props.boardType) === "splitflap" && !f.image && <WholeValueOption area={f} onChange={(patch) => setField(i, patch)} />}
+      {fields.map((f, i) => (
+        <div className="area-card" key={`f${i}`}>
+          <div className="area-card-head">
+            <input className="area-id" value={f.id} onChange={(e) => setField(i, { id: e.target.value })} aria-label="Field name" />
+            <button className="icon" title="Remove this field" onClick={() => onChange({ fields: fields.filter((_, j) => j !== i), lists })}>
+              ×
+            </button>
           </div>
-        );
-      })}
+          <FieldBody
+            field={f}
+            columns={columns}
+            rows={rows}
+            style={style}
+            boardType={props.boardType}
+            showing={props.showing[f.id]}
+            onChange={(patch) => setField(i, patch)}
+            onCell={(cell) => onChange({ fields: fields.map((x, j) => (j === i ? withCell(x, cell) : x)), lists })}
+          />
+        </div>
+      ))}
       <button onClick={addField}>+ Add a field</button>
 
       <h3>Lists</h3>
@@ -226,8 +217,164 @@ export function AreasEditor(props: AreasEditorProps) {
         );
       })}
       <button onClick={addList}>+ Add a list</button>
+
+      <h3>Card lists</h3>
+      <p className="hint">
+        One card designed once, repeated over an area: each card shows the next record, and the cards page through the records
+        together. Parts are placed within the card, counting from its top left.
+      </p>
+      {cards.length === 0 && <p className="hint">None yet.</p>}
+      {cards.map((list, c) => {
+        const rect = parseArea(list.area ?? "");
+        const size = rect ? cardSize(list, rect) : { width: columns, height: 1 };
+        const fit = rect ? cardRects(list, rect) : [];
+        const across = rect ? Math.floor((rect.x2 - rect.x1 + 1) / size.width) : 0;
+        const parts = Array.isArray(list.parts) ? list.parts : [];
+        return (
+          <div className="area-card" key={`c${c}`}>
+            <div className="area-card-head">
+              <input className="area-id" value={list.id} onChange={(e) => setCards(c, { id: e.target.value })} aria-label="Card list name" />
+              <button className="icon" title="Remove this card list" onClick={() => onChange({ cards: cards.filter((_, j) => j !== c) })}>
+                ×
+              </button>
+            </div>
+            <PositionFields area={list.area} columns={columns} rows={rows} onChange={(area) => setCards(c, { area })} />
+            <div className="row-editor">
+              <label className="inline">
+                Card height
+                <input
+                  type="number"
+                  min={1}
+                  max={rows}
+                  value={list.cardHeight}
+                  onChange={(e) => setCards(c, { cardHeight: Math.max(1, Number(e.target.value) || 1) })}
+                  style={{ width: 60 }}
+                />
+              </label>
+              <label className="inline" title="Leave empty for cards as wide as the area, one above another">
+                Card width
+                <input
+                  type="number"
+                  min={1}
+                  max={columns}
+                  value={list.cardWidth ?? ""}
+                  placeholder={String(size.width)}
+                  onChange={(e) => {
+                    const { cardWidth: _old, ...rest } = list;
+                    const width = Number(e.target.value);
+                    onChange({ cards: cards.map((x, j) => (j === c ? (e.target.value === "" || !width ? rest : { ...rest, cardWidth: width }) : x)) });
+                  }}
+                  style={{ width: 60 }}
+                />
+              </label>
+              <span className="hint">
+                {fit.length} card{fit.length === 1 ? "" : "s"} fit{across > 1 ? ` (${across} across)` : ""}
+              </span>
+            </div>
+            <div className="list-columns">
+              {parts.map((part, p) => (
+                <div className="list-column" key={p}>
+                  <div className="row-editor">
+                    <span className="list-column-number">{p + 1}</span>
+                    <input className="area-id" value={part.id ?? ""} onChange={(e) => setPart(c, p, { id: e.target.value })} aria-label="Part name" placeholder="Part name" />
+                    <button className="icon" title="Remove this part" onClick={() => setCards(c, { parts: parts.filter((_, k) => k !== p) })} disabled={parts.length === 1}>
+                      ×
+                    </button>
+                  </div>
+                  <FieldBody
+                    field={part as FieldArea}
+                    columns={size.width}
+                    rows={size.height}
+                    style={style}
+                    boardType={props.boardType}
+                    onChange={(patch) => setPart(c, p, patch)}
+                    onCell={(cell) => setCards(c, { parts: parts.map((x, k) => (k === p ? withCell(x, cell) : x)) })}
+                  />
+                </div>
+              ))}
+              <button onClick={() => setCards(c, { parts: [...parts, { id: freshPart(parts), area: "0,0", text: "" }] })}>+ Add a part</button>
+            </div>
+          </div>
+        );
+      })}
+      <button onClick={addCards}>+ Add a card list</button>
     </div>
   );
+}
+
+/**
+ * Where a field (or a card's part) is and what it shows: its position (within the board, or
+ * within a card), its text, alignment, which record (fields only), and how it is drawn.
+ */
+function FieldBody({
+  field: f,
+  columns,
+  rows,
+  style,
+  boardType,
+  showing,
+  onChange,
+  onCell,
+}: {
+  field: FieldArea;
+  columns: number;
+  rows: number;
+  style: Omit<Parameters<typeof CellStyle>[0], "cell" | "onChange">;
+  boardType: CellType;
+  /** What a field shows now; a card's part leaves it out, as each card shows something different. */
+  showing?: string;
+  onChange: (patch: Partial<FieldArea>) => void;
+  onCell: (cell: FieldArea["cell"]) => void;
+}) {
+  const rect = parseArea(f.area ?? "");
+  const tall = !!rect && rect.y2 > rect.y1;
+  const fromData = typeof f.text === "string" && f.text.includes("{");
+  const isPart = showing === undefined;
+  return (
+    <>
+      <PositionFields area={f.area} columns={columns} rows={rows} onChange={(area) => onChange({ area })} />
+      <label>
+        Shows
+        {tall ? (
+          <textarea rows={2} value={f.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} placeholder="Words, or {column} from the data" />
+        ) : (
+          <input value={f.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} placeholder="Words, or {column} from the data" />
+        )}
+      </label>
+      <div className="row-editor">
+        <select value={f.align ?? "left"} onChange={(e) => onChange({ align: e.target.value as FieldArea["align"] })} aria-label="Alignment">
+          {ALIGNS.map((a) => (
+            <option key={a.value} value={a.value}>
+              {a.label}
+            </option>
+          ))}
+        </select>
+        {fromData && !isPart && (
+          <label className="inline" title="Which record of the data this field shows: 1 is the first">
+            Record
+            <input
+              type="number"
+              min={1}
+              value={(f.row ?? 0) + 1}
+              onChange={(e) => onChange({ row: Math.max(0, Number(e.target.value) - 1) || undefined })}
+              style={{ width: 60 }}
+            />
+          </label>
+        )}
+        {!isPart && <span className="hint">now: {showingNow(showing)}</span>}
+      </div>
+      <CellStyle cell={f.cell} {...style} onChange={onCell} />
+      <ImageOption area={f} onChange={onChange} />
+      {(f.cell?.type ?? boardType) === "splitflap" && !f.image && <WholeValueOption area={f} onChange={onChange} />}
+    </>
+  );
+}
+
+/** A name for a new part that no other part of the card has. */
+function freshPart(parts: CardPart[]): string {
+  let n = parts.length + 1;
+  while (parts.some((p) => p.id === `part${n}`)) n++;
+  return `part${n}`;
 }
 
 /** What a field shows now, in a few words: an image's source is far too long to print. */

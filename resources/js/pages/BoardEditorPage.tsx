@@ -17,6 +17,7 @@ import {
   type FlapTiming,
   type Finish,
   type TextStyle,
+  type TurnBy,
 } from "../board/layout";
 import { useBoardData } from "../board/useBoardData";
 import { usePaging } from "../board/usePaging";
@@ -114,6 +115,7 @@ export default function BoardEditorPage() {
   const [flapTiming, setFlapTiming] = useState<FlapTiming>("together");
   const [rowDelay, setRowDelay] = useState(0);
   const [rowsInTurn, setRowsInTurn] = useState(false);
+  const [turnBy, setTurnBy] = useState<TurnBy>("row");
   const [clearRows, setClearRows] = useState(false);
   const [fontId, setFontId] = useState(FONTS[0].id);
   const [stackName, setStackName] = useState<CharsetName>("standard");
@@ -153,6 +155,7 @@ export default function BoardEditorPage() {
     const templates = [
       ...fields.filter(bound).map((f) => f.text as string),
       ...(shape.lists ?? []).flatMap((l) => (Array.isArray(l.columns) ? l.columns.map((c) => String(c.text ?? "")) : [])),
+      ...(shape.cards ?? []).flatMap((c) => (Array.isArray(c.parts) ? c.parts.map((p) => String(p.text ?? "")) : [])),
     ];
     return [...new Set(templates.flatMap(templateColumns))].filter((c) => !have.has(c));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -205,7 +208,7 @@ export default function BoardEditorPage() {
         stack: CHARSETS[stackName],
         flipMs,
         ...(flapTiming !== "together" ? { flapTiming } : {}),
-        ...(rowsInTurn ? { rowsInTurn } : rowDelay > 0 ? { rowDelay } : {}),
+        ...(rowsInTurn ? { rowsInTurn, ...(turnBy !== "row" ? { turnBy } : {}) } : rowDelay > 0 ? { rowDelay } : {}),
         ...(clearRows ? { clearRows } : {}),
         segments,
         ...(finish !== "led" ? { finish } : {}),
@@ -222,7 +225,7 @@ export default function BoardEditorPage() {
           : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, rowsInTurn, clearRows, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, rowsInTurn, turnBy, clearRows, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -258,6 +261,7 @@ export default function BoardEditorPage() {
     setFlapTiming(cell.flapTiming ?? "together");
     setRowDelay(cell.rowDelay ?? 0);
     setRowsInTurn(cell.rowsInTurn === true);
+    setTurnBy(cell.turnBy ?? "row");
     setClearRows(cell.clearRows === true);
     setFontId(FONTS.find((f) => f.family === cell.fontFamily)?.id ?? FONTS[0].id);
     setStackName(
@@ -624,10 +628,12 @@ export default function BoardEditorPage() {
                         <label title="Many station boards updated a row at a time, so a change rippled down the board">
                           Rows start
                           <select
-                            value={rowsInTurn ? "finished" : rowDelay}
+                            value={rowsInTurn ? `turn-${turnBy}` : rowDelay}
                             onChange={(e) => {
-                              setRowsInTurn(e.target.value === "finished");
-                              setRowDelay(e.target.value === "finished" ? 0 : Number(e.target.value));
+                              const inTurn = e.target.value.startsWith("turn-");
+                              setRowsInTurn(inTurn);
+                              setTurnBy(inTurn ? (e.target.value.slice(5) as TurnBy) : "row");
+                              setRowDelay(inTurn ? 0 : Number(e.target.value));
                             }}
                           >
                             <option value={0}>All together</option>
@@ -636,7 +642,11 @@ export default function BoardEditorPage() {
                                 Each {n} beat{n === 1 ? "" : "s"} after the row above
                               </option>
                             ))}
-                            <option value="finished">Each once the row above has finished</option>
+                            <option value="turn-row">Each once the row above has finished</option>
+                            <option value="turn-pair">Two rows at a time, each pair once the pair above has finished</option>
+                            {(shape.cards?.length || turnBy === "card") && (
+                              <option value="turn-card">One card at a time, each once the card before has finished</option>
+                            )}
                           </select>
                         </label>
                       )}
@@ -733,6 +743,7 @@ export default function BoardEditorPage() {
               <AreasEditor
                 fields={shape.fields ?? []}
                 lists={shape.lists ?? []}
+                cards={shape.cards ?? []}
                 columns={shape.columns}
                 rows={shape.rows}
                 boardType={cellType}
@@ -742,7 +753,7 @@ export default function BoardEditorPage() {
                 boardTextStyle={cellType === "text" ? textStyle : undefined}
                 dataColumns={shape.dataSource ? data.columns : feed === BUILT_IN ? Object.keys(SAMPLE_RECORDS[0] ?? {}) : []}
                 showing={boardValues}
-                onChange={({ fields: f, lists: l }) => replaceShape({ ...shape, fields: f, lists: l })}
+                onChange={(next) => replaceShape({ ...shape, ...next })}
               />
             )}
 

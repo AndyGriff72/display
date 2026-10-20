@@ -88,6 +88,9 @@ export interface AreaCell extends TextStyle {
 
 export const FLAP_TIMINGS = ["together", "independent"] as const;
 
+export const TURN_BYS = ["row", "pair", "card"] as const;
+export type TurnBy = (typeof TURN_BYS)[number];
+
 /** The most beats a row can start after the row above (see CellSettings.rowDelay). */
 export const MAX_ROW_DELAY = 6;
 export type FlapTiming = (typeof FLAP_TIMINGS)[number];
@@ -126,6 +129,12 @@ export interface CellSettings extends TextStyle {
    * rowDelay.
    */
   rowsInTurn?: boolean;
+  /**
+   * With rowsInTurn: what takes its turn. "row" (the default), one row at a time; "pair", two rows
+   * at a time, as many station boards did; "card", one card of a card list at a time (rows
+   * outside card lists still go a row at a time).
+   */
+  turnBy?: TurnBy;
   /**
    * Split-flap: when anything in a row changes, every tile in that row first goes round to the
    * blank, and once the whole row is clear they set off for the new characters together, as
@@ -253,6 +262,30 @@ export interface ListColumn {
 }
 
 /**
+ * Part of a card (see CardList): a field, placed within the card ("0,0" is the card's top left
+ * corner), showing that card's record.
+ */
+export type CardPart = Omit<FieldArea, "row">;
+
+/**
+ * Records as cards: one card design, repeated over an area of the board, each card showing the
+ * next record. Cards fill the area left to right, then top to bottom (so cards as wide as the
+ * area stack one above another), and page through the records together, as lists do. A card
+ * with no record left to show is blank.
+ */
+export interface CardList {
+  id: string;
+  /** The area the cards fill. */
+  area: string;
+  /** One card's height, in cells. */
+  cardHeight: number;
+  /** One card's width, in cells. Defaults to the area's width. */
+  cardWidth?: number;
+  /** What each card shows: fields placed within the card. */
+  parts: CardPart[];
+}
+
+/**
  * Records as rows: each board row in the area shows one record, laid out in columns, with an
  * optional header row of column titles first. Columns are placed by their x, or one cell after
  * the column before; the space between them is bare.
@@ -308,6 +341,7 @@ export interface BoardLayout {
   statics?: StaticArea[];
   fields?: FieldArea[];
   lists?: ListArea[];
+  cards?: CardList[];
 }
 
 /** An area with its corners resolved, inclusive at both ends. */
@@ -379,6 +413,9 @@ export function validateLayout(layout: BoardLayout): string[] {
   if (cell?.rowDelay !== undefined && !(Number.isInteger(cell.rowDelay) && cell.rowDelay >= 0 && cell.rowDelay <= MAX_ROW_DELAY)) {
     errors.push(`The board's cells: rowDelay must be a whole number of beats, from 0 to ${MAX_ROW_DELAY}.`);
   }
+  if (cell?.turnBy !== undefined && !TURN_BYS.includes(cell.turnBy)) {
+    errors.push(`The board's cells: turnBy must be one of ${TURN_BYS.map((t) => `"${t}"`).join(", ")}.`);
+  }
   for (const key of ["rowsInTurn", "clearRows"] as const) {
     if (cell?.[key] !== undefined && typeof cell[key] !== "boolean") errors.push(`The board's cells: ${key} must be true or false, without quotes.`);
   }
@@ -400,8 +437,9 @@ export function validateLayout(layout: BoardLayout): string[] {
   const statics: { id: string; rect: Rect }[] = [];
   const fields: { id: string; rect: Rect }[] = [];
   const lists: { id: string; rect: Rect }[] = [];
+  const cardLists: { id: string; rect: Rect }[] = [];
 
-  const check = (kind: "Static area" | "Field" | "List", id: string, area: string) => {
+  const check = (kind: "Static area" | "Field" | "List" | "Card list", id: string, area: string) => {
     if (seen.has(id)) errors.push(`${kind} "${id}": another area already has that id.`);
     seen.add(id);
     const rect = parseArea(area ?? "");
@@ -451,6 +489,12 @@ export function validateLayout(layout: BoardLayout): string[] {
     errors.push(...listProblems(l, rect));
   }
 
+  for (const c of layout.cards ?? []) {
+    const rect = check("Card list", c.id, c.area);
+    if (rect) cardLists.push({ id: c.id, rect });
+    errors.push(...cardProblems(c, rect));
+  }
+
   const pairs = (list: { id: string; rect: Rect }[], other: { id: string; rect: Rect }[], same: boolean) => {
     list.forEach((a, i) =>
       (same ? other.slice(i + 1) : other).forEach((b) => {
@@ -466,8 +510,80 @@ export function validateLayout(layout: BoardLayout): string[] {
   pairs(fields, statics, false);
   pairs(lists, statics, false);
   pairs(lists, fields, false);
+  pairs(cardLists, cardLists, true);
+  pairs(cardLists, statics, false);
+  pairs(cardLists, fields, false);
+  pairs(cardLists, lists, false);
 
   return errors;
+}
+
+/** One card's size in a card list on `rect`: its own, or (width) the area's. */
+export function cardSize(cards: CardList, rect: Rect): { width: number; height: number } {
+  const width = Number.isInteger(cards.cardWidth) && (cards.cardWidth as number) > 0 ? (cards.cardWidth as number) : areaWidth(rect);
+  const height = Number.isInteger(cards.cardHeight) && cards.cardHeight > 0 ? cards.cardHeight : areaHeight(rect);
+  return { width, height };
+}
+
+/**
+ * Where each card of a card list on `rect` goes: as many as fit, left to right, then top to
+ * bottom. Space left over at the right or bottom stays bare.
+ */
+export function cardRects(cards: CardList, rect: Rect): Rect[] {
+  const { width, height } = cardSize(cards, rect);
+  const across = Math.floor(areaWidth(rect) / width);
+  const down = Math.floor(areaHeight(rect) / height);
+  const out: Rect[] = [];
+  for (let j = 0; j < down; j++) {
+    for (let i = 0; i < across; i++) {
+      const x1 = rect.x1 + i * width;
+      const y1 = rect.y1 + j * height;
+      out.push({ x1, y1, x2: x1 + width - 1, y2: y1 + height - 1 });
+    }
+  }
+  return out;
+}
+
+function cardProblems(cards: CardList, rect: Rect | null): string[] {
+  const name = `Card list "${cards.id}"`;
+  const problems: string[] = [];
+  if (!(Number.isInteger(cards.cardHeight) && cards.cardHeight >= 1)) problems.push(`${name}: cardHeight must be a whole number of rows.`);
+  if (cards.cardWidth !== undefined && !(Number.isInteger(cards.cardWidth) && cards.cardWidth >= 1)) {
+    problems.push(`${name}: cardWidth must be a whole number of columns.`);
+  }
+  if (rect && problems.length === 0) {
+    const { width, height } = cardSize(cards, rect);
+    if (width > areaWidth(rect) || height > areaHeight(rect)) {
+      problems.push(`${name}: a card (${width} x ${height}) is bigger than its area (${areaWidth(rect)} x ${areaHeight(rect)}).`);
+    }
+  }
+  if (!Array.isArray(cards.parts) || cards.parts.length === 0) {
+    problems.push(`${name}: give its cards at least one part, e.g. { "id": "title", "area": "0,0 to 9,0", "text": "{title}" }.`);
+    return problems;
+  }
+  const size = rect ? cardSize(cards, rect) : null;
+  const placed: { id: string; rect: Rect }[] = [];
+  const ids = new Set<string>();
+  cards.parts.forEach((part, i) => {
+    const which = `${name}, part ${part?.id ? `"${part.id}"` : i + 1}`;
+    if (part?.id) {
+      if (ids.has(part.id)) problems.push(`${which}: another part already has that id.`);
+      ids.add(part.id);
+    }
+    const r = parseArea(part?.area ?? "");
+    if (!r) {
+      problems.push(`${which}: "${part?.area}" is not an area. Write it as "x1,y1 to x2,y2", counting from the card's top left.`);
+    } else if (size && (r.x2 >= size.width || r.y2 >= size.height)) {
+      problems.push(`${which}: ${part.area} goes off the card, which runs from 0,0 to ${size.width - 1},${size.height - 1}.`);
+    } else {
+      for (const other of placed) if (overlaps(r, other.rect)) problems.push(`${which} and part "${other.id}" overlap.`);
+      placed.push({ id: part.id ?? String(i + 1), rect: r });
+    }
+    if (part?.text !== undefined && typeof part.text !== "string") problems.push(`${which}: text must be written in quotes, e.g. "{title}".`);
+    problems.push(...areaCellProblems(which, part?.cell));
+    problems.push(...wholeValueProblems(which, part ?? {}));
+  });
+  return problems;
 }
 
 /**

@@ -12,6 +12,7 @@ import { plainText } from "./plainText";
 import {
   areaHeight,
   areaWidth,
+  cardRects,
   columnOffsets,
   contains,
   DEFAULT_COLOURS,
@@ -24,11 +25,13 @@ import {
   type BoardLayout,
   type CellSettings,
   type CellType,
+  type FieldArea,
   type ListArea,
   type ListColumn,
   type Rect,
   type StaticArea,
   type ImageValue,
+  type TurnBy,
   type WholeValue,
 } from "./layout";
 import { imageSource } from "./images";
@@ -498,6 +501,60 @@ export function faceFor(value: string, faces: string[], exact = false): number {
   if (own >= 0 || exact) return Math.max(0, own);
   const lower = value.toLowerCase();
   return Math.max(0, faces.findIndex((f) => f.toLowerCase() === lower));
+}
+
+/**
+ * A layout with its card lists turned into ordinary fields: one for each part of each card,
+ * placed on the board, with the text it shows from that card's record (page `page` of the
+ * records, as for lists: see pageOffset). A card with no record is blank. Everything that draws
+ * fields then draws cards too, with nothing further to know about them.
+ *
+ * Also gives where each card is, for drawing outlines and for boards that change a card at a time.
+ */
+export function withCards(
+  layout: BoardLayout,
+  records: Row[] = [],
+  page = 0
+): { layout: BoardLayout; values: Record<string, string>; cards: Rect[] } {
+  if (!layout.cards?.length) return { layout, values: {}, cards: [] };
+  const fields: FieldArea[] = [];
+  const values: Record<string, string> = {};
+  const cards: Rect[] = [];
+  for (const list of layout.cards) {
+    const area = parseArea(list.area ?? "");
+    if (!area || !Array.isArray(list.parts)) continue;
+    const places = cardRects(list, area);
+    const offset = pageOffset(records.length, places.length, page);
+    places.forEach((card, i) => {
+      cards.push(card);
+      const record = records[offset + i];
+      list.parts.forEach((part, j) => {
+        const r = parseArea(part?.area ?? "");
+        if (!r || card.x1 + r.x2 > card.x2 || card.y1 + r.y2 > card.y2) return;
+        const id = `${list.id}#${i}.${part.id ?? j}`;
+        const { row: _row, ...rest } = part as FieldArea;
+        fields.push({ ...rest, id, area: `${card.x1 + r.x1},${card.y1 + r.y1} to ${card.x1 + r.x2},${card.y1 + r.y2}` });
+        values[id] = record && typeof part.text === "string" ? renderTemplate(part.text, record) : "";
+      });
+    });
+  }
+  return { layout: { ...layout, fields: [...(layout.fields ?? []), ...fields] }, values, cards };
+}
+
+/**
+ * Which group each position takes its turn in, as a number, lower first (see FlapClock's rows):
+ * its row; its pair of rows; or the card it is in (by the card's top, then its left), with
+ * positions in no card going by their row. Also what a clearing board clears together.
+ */
+export function turnGroups(turnBy: TurnBy, cards: Rect[]): (x: number, y: number) => number {
+  if (turnBy === "pair") return (_x, y) => Math.floor(y / 2) * 2 * 1000;
+  if (turnBy === "card") {
+    return (x, y) => {
+      const card = cards.find((c) => x >= c.x1 && x <= c.x2 && y >= c.y1 && y <= c.y2);
+      return card ? card.y1 * 1000 + card.x1 : y * 1000;
+    };
+  }
+  return (_x, y) => y * 1000;
 }
 
 /** Characters in a list's header rows, and the colour each should be. Keyed "x,y". */
