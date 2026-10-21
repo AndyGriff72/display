@@ -75,3 +75,14 @@
   fill: #fff6dc;
   opacity: 0.85;
 }
+
+/* A dot-matrix cell drawn on a canvas (DotMatrixCell): the canvas reaches past the cell, for the glow. */
+.lit-canvas-cell {
+  position: relative;
+}
+
+.lit-canvas {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+}
