@@ -19,7 +19,6 @@
   flex: none;
   width: var(--sf-w);
   height: var(--sf-h);
-  perspective: calc(var(--sf-h) * 4);
   font-family: var(--sf-font);
   font-size: var(--sf-font-size);
   font-weight: 500;
@@ -34,8 +33,15 @@
   height: calc(50% - var(--sf-gap) / 2);
   overflow: hidden;
   background: var(--sf-bg);
-  backface-visibility: hidden;
 }
+
+/*
+ * Nothing here makes a cell a stacking context (as perspective or backface-visibility would),
+ * on purpose: a cell's falling flap then sits above every cell rather than inside its own, and
+ * the browser need not give each of the cells drawn after it a layer of its own on the
+ * graphics card, which on a busy board left it no time to show the falls. Flaps fold flat, and
+ * turn no more than a quarter, so their backs never show.
+ */
 
 .sf-top {
   top: 0;

@@ -110,6 +110,12 @@ export const SplitFlapCell = memo(function SplitFlapCell({
   );
 });
 
+/**
+ * How many flaps long the fall's animations are: the fall, then the flap held where it landed.
+ * Far more than a beat ever takes, so the next beat always rewinds them before they come round.
+ */
+const FALL_HOLD = 64;
+
 interface DrumSettings {
   target: string;
   stack: string;
@@ -133,8 +139,11 @@ class FlapDrum implements FlapMover {
   /** The row's contents last time: when they change (and the row clears first), it clears. */
   private rowKey: string | undefined = undefined;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  /** The four glyphs: the two halves at rest, and the two of the falling flap. */
-  private readonly glyphs: HTMLElement[];
+  /**
+   * The four glyphs' text: the two halves at rest, and the two of the falling flap. Changed in
+   * place, which is cheaper for the browser than replacing it.
+   */
+  private readonly glyphs: Text[];
   /** What each glyph shows, so a beat only writes the letters that change. */
   private readonly written: (string | null)[] = [null, null, null, null];
   private readonly flapPair: HTMLElement;
@@ -145,7 +154,7 @@ class FlapDrum implements FlapMover {
   private pairShown = false;
 
   constructor(root: HTMLElement, blank: string) {
-    const glyph = (half: Element) => half.querySelector<HTMLElement>(".sf-glyph")!;
+    const glyph = (half: Element) => half.querySelector(".sf-glyph")!.appendChild(document.createTextNode(""));
     const [top, bottom, pair] = Array.from(root.children) as HTMLElement[];
     const [flapTop, flapBottom] = Array.from(pair.children) as HTMLElement[];
     this.glyphs = [glyph(top), glyph(bottom), glyph(flapTop), glyph(flapBottom)];
@@ -264,47 +273,64 @@ class FlapDrum implements FlapMover {
     if (flipping !== this.pairShown) {
       this.pairShown = flipping;
       this.flapPair.style.visibility = flipping ? "visible" : "hidden";
+      // At rest: stop the fall's animations, so they cost nothing until the next change.
+      if (!flipping) this.falling?.forEach((a) => a.pause());
     }
   }
 
   private write(i: number, text: string): void {
     if (this.written[i] === text) return;
     this.written[i] = text;
-    this.glyphs[i].textContent = text;
+    this.glyphs[i].data = text;
   }
 
   /**
    * The flap falling: the top folds down over the hinge and out of sight, darkening as it turns
    * away from the light; then its back, the next character's bottom, swings down and lands.
    * The animations are made the first time and rewound to the start for every flap after.
+   *
+   * The fall is the first beat of a much longer animation, the rest of which holds still: so
+   * the animations are still running when the next beat rewinds them, and the browser keeps the
+   * two halves as they are on the graphics card from one flap to the next. (An animation that
+   * finished every beat had them set up afresh for every flap, which on a busy board was
+   * enough to leave no time to show the falls at all.) They are paused when the cell stops.
    */
   private fall(): void {
-    const half = this.settings.flipMs / 2;
-    if (!this.falling || this.fallingMs !== half) {
+    const { flipMs } = this.settings;
+    if (!this.falling || this.fallingMs !== flipMs) {
       this.falling?.forEach((a) => a.cancel());
       const [top, bottom] = this.flapHalves;
+      // The fall's two halves as fractions of the whole animation, FALL_HOLD flaps long.
+      const h = 1 / (2 * FALL_HOLD);
+      const turn = (deg: number) => `rotateX(${deg}deg)`;
+      const lit = { filter: "brightness(1)" };
+      const dim = { filter: "brightness(0.55)" };
+      const timing = { duration: flipMs * FALL_HOLD, iterations: Infinity };
       this.falling = [
         top.animate(
           [
-            { transform: "rotateX(0deg)", filter: "brightness(1)" },
-            { transform: "rotateX(-90deg)", filter: "brightness(0.55)" },
+            { offset: 0, transform: turn(0), ...lit, easing: "ease-in" },
+            { offset: h, transform: turn(-90), ...dim },
+            { offset: 1, transform: turn(-90), ...dim },
           ],
-          { duration: half, easing: "ease-in", fill: "forwards", id: "sf-fall-top" }
+          { ...timing, id: "sf-fall-top" }
         ),
         bottom.animate(
           [
-            { transform: "rotateX(90deg)", filter: "brightness(0.55)" },
-            { transform: "rotateX(0deg)", filter: "brightness(1)" },
+            { offset: 0, transform: turn(90), ...dim },
+            { offset: h, transform: turn(90), ...dim, easing: "ease-out" },
+            { offset: 2 * h, transform: turn(0), ...lit },
+            { offset: 1, transform: turn(0), ...lit },
           ],
-          { duration: half, delay: half, easing: "ease-out", fill: "both", id: "sf-fall-bottom" }
+          { ...timing, id: "sf-fall-bottom" }
         ),
       ];
-      this.fallingMs = half;
+      this.fallingMs = flipMs;
       return;
     }
     for (const a of this.falling) {
       a.currentTime = 0;
-      a.play();
+      if (a.playState !== "running") a.play();
     }
   }
 }

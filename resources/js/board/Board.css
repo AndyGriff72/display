@@ -28,6 +28,8 @@
   background: var(--board-bg);
   border-radius: 8px;
   box-shadow: inset 0 0 0 1px #333, 0 10px 30px rgba(0, 0, 0, 0.5);
+  /* Split-flap cells' falling flaps sit above every cell, but no higher than the board. */
+  isolation: isolate;
 }
 
 /*
