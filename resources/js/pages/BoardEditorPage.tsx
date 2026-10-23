@@ -119,6 +119,7 @@ export default function BoardEditorPage() {
   const [rowsInTurn, setRowsInTurn] = useState(false);
   const [turnBy, setTurnBy] = useState<TurnBy>("row");
   const [clearRows, setClearRows] = useState(false);
+  const [clearBy, setClearBy] = useState<"row" | "card">("row");
   // Lit cells printing one character at a time (see printing.tsx).
   const [printOut, setPrintOut] = useState(false);
   const [printMs, setPrintMs] = useState(DEFAULT_PRINT_MS);
@@ -217,7 +218,7 @@ export default function BoardEditorPage() {
         flipMs,
         ...(flapTiming !== "together" ? { flapTiming } : {}),
         ...(rowsInTurn ? { rowsInTurn, ...(turnBy !== "row" ? { turnBy } : {}) } : rowDelay > 0 ? { rowDelay } : {}),
-        ...(clearRows ? { clearRows } : {}),
+        ...(clearRows ? { clearRows, ...(clearBy !== "row" ? { clearBy } : {}) } : {}),
         ...(printOut ? { printOut, ...(printMs !== DEFAULT_PRINT_MS ? { printMs } : {}), ...(printRows !== "together" ? { printRows } : {}) } : {}),
         ...(motionSetting !== "auto" ? { motion: motionSetting } : {}),
         segments,
@@ -235,7 +236,7 @@ export default function BoardEditorPage() {
           : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, rowsInTurn, turnBy, clearRows, printOut, printMs, printRows, motionSetting, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, rowsInTurn, turnBy, clearRows, clearBy, printOut, printMs, printRows, motionSetting, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -273,6 +274,7 @@ export default function BoardEditorPage() {
     setRowsInTurn(cell.rowsInTurn === true);
     setTurnBy(cell.turnBy ?? "row");
     setClearRows(cell.clearRows === true);
+    setClearBy(cell.clearBy ?? "row");
     setPrintOut(cell.printOut === true);
     setPrintMs(cell.printMs ?? DEFAULT_PRINT_MS);
     setPrintRows(cell.printRows ?? "together");
@@ -695,6 +697,15 @@ export default function BoardEditorPage() {
                         <input type="checkbox" checked={clearRows} onChange={(e) => setClearRows(e.target.checked)} />
                         Clear each row before showing its new data
                       </label>
+                      {clearRows && (shape.cards?.length || clearBy === "card") && (
+                        <label title="A whole card goes blank before any of it fills, so it never shows half of one record and half of the next">
+                          What clears
+                          <select value={clearBy} onChange={(e) => setClearBy(e.target.value as "row" | "card")}>
+                            <option value="row">Each row</option>
+                            <option value="card">Each whole card, then it fills as rows take their turn</option>
+                          </select>
+                        </label>
+                      )}
                     </>
                   )}
                   <label title="Slower devices can show changes with less animation, so they keep up and the sound stays with the picture">

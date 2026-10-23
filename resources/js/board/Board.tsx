@@ -116,7 +116,14 @@ export function Board({ layout: given, values: givenValues, records = [], page =
   // pairs of rows, or cards (positions in no card going a row at a time). Lower goes first.
   const turnBy = rowsInTurn ? (layout.cell.turnBy ?? "row") : "row";
   const groupOf = useMemo(() => turnGroups(turnBy, expanded.cards), [turnBy, expanded.cards]);
-  const rowKeys = useMemo(() => (layout.cell.clearRows ? groupContents(cells, flaps, groupOf) : null), [layout.cell.clearRows, cells, flaps, groupOf]);
+  // What clears together when rows clear first (see CellSettings.clearBy): what takes its turn,
+  // or each whole card (rows outside cards clearing as rows).
+  const clearByCard = layout.cell.clearBy === "card" && expanded.cards.length > 0;
+  const clearGroupOf = useMemo(() => (clearByCard ? turnGroups("card", expanded.cards) : groupOf), [clearByCard, expanded.cards, groupOf]);
+  const rowKeys = useMemo(
+    () => (layout.cell.clearRows ? groupContents(cells, flaps, clearGroupOf) : null),
+    [layout.cell.clearRows, cells, flaps, clearGroupOf]
+  );
   for (const flipMs of new Set([...specs.values(), ...flaps.map((f) => f.spec)].map((s) => s.flipMs))) {
     const clock = clockFor(flipMs);
     if (clock) clock.rowByRow = rowsInTurn;
@@ -244,7 +251,8 @@ export function Board({ layout: given, values: givenValues, records = [], page =
                 tracker={together ? undefined : tracker}
                 startDelay={rowDelay * y}
                 row={groupOf(x, y)}
-                rowKey={rowKeys?.get(groupOf(x, y))}
+                rowKey={rowKeys?.get(clearGroupOf(x, y))}
+                clearGroup={clearGroupOf(x, y)}
                 background={spec.background}
                 onFlap={onFlap}
                 motion={motion}
@@ -272,7 +280,8 @@ export function Board({ layout: given, values: givenValues, records = [], page =
             tracker={together ? undefined : tracker}
             startDelay={rowDelay * f.rect.y1}
             row={groupOf(f.rect.x1, f.rect.y1)}
-            rowKey={rowKeys?.get(groupOf(f.rect.x1, f.rect.y1))}
+            rowKey={rowKeys?.get(clearGroupOf(f.rect.x1, f.rect.y1))}
+            clearGroup={clearGroupOf(f.rect.x1, f.rect.y1)}
             align={f.align}
             images={f.image}
             fit={f.fit}

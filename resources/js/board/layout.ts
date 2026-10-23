@@ -143,6 +143,13 @@ export interface CellSettings extends TextStyle {
    */
   clearRows?: boolean;
   /**
+   * With clearRows: what clears together. "row" (the default), each row (or whatever takes its
+   * turn, with rowsInTurn); "card", each whole card of a card list, which then fills as its rows
+   * take their turns, so a card never shows half of one record and half of the next. Rows
+   * outside card lists clear as rows.
+   */
+  clearBy?: "row" | "card";
+  /**
    * Dot matrix and segments: print characters one at a time, with a cursor just ahead (a block,
    * or a dash on segments), a row printing again from the left whenever it changes.
    */
@@ -433,6 +440,9 @@ export function validateLayout(layout: BoardLayout): string[] {
   }
   if (cell?.printMs !== undefined && !(typeof cell.printMs === "number" && cell.printMs >= 1 && cell.printMs <= 1000)) {
     errors.push("The board's cells: printMs must be a number of milliseconds, from 1 to 1000.");
+  }
+  if (cell?.clearBy !== undefined && cell.clearBy !== "row" && cell.clearBy !== "card") {
+    errors.push(`The board's cells: clearBy must be "row" or "card".`);
   }
   if (cell?.printRows !== undefined && cell.printRows !== "together" && cell.printRows !== "inTurn") {
     errors.push(`The board's cells: printRows must be "together" or "inTurn".`);

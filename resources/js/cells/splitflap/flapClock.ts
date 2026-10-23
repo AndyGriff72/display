@@ -11,6 +11,8 @@
  * number of beats before starting (rows starting one after another), or (rowByRow) a row can
  * wait until the row above has finished. And when a row clears before changing, its drums
  * each go round to the blank and wait there, released together once the whole row is clear.
+ * What clears together can be bigger than what takes its turn: a whole card of a card list can
+ * clear, and then fill a row at a time.
  *
  * Browsers run timers late when the page is busy, so beats are counted from when the clock
  * started rather than from the last one: a late beat never pushes the rest later. Each beat
@@ -21,7 +23,10 @@ import { beatTimingOn, ChangeRecorder } from "./beatTiming";
 import type { FlapMover } from "./drum";
 
 interface Place {
+  /** What takes its turn with it (see rowByRow): its row, pair of rows or card. */
   row: number;
+  /** What clears with it, before a change: its row, unless a whole card clears together. */
+  clear: number;
   /** Beats still to wait before the first step. */
   wait: number;
 }
@@ -66,8 +71,8 @@ export class FlapClock {
    * moving, so drums that start in the same moment stay in step all the way; or `wait` beats
    * later, still in step; or, with rowByRow, once the rows above it have finished.
    */
-  join(mover: FlapMover, { row = 0, wait = 0 }: { row?: number; wait?: number } = {}): void {
-    if (!this.movers.has(mover)) this.movers.set(mover, { row, wait: Math.max(0, Math.round(wait)) });
+  join(mover: FlapMover, { row = 0, wait = 0, clear = row }: { row?: number; wait?: number; clear?: number } = {}): void {
+    if (!this.movers.has(mover)) this.movers.set(mover, { row, clear, wait: Math.max(0, Math.round(wait)) });
     if (this.timer === null) {
       this.startedAt = Date.now();
       this.beatNumber = 1;
@@ -98,14 +103,19 @@ export class FlapClock {
     this.timer = setTimeout(this.tick, Math.max(0, this.dueAt() - Date.now()));
   }
 
-  /** The drums that move on this beat: all of them, or with rowByRow, one row's. */
+  /**
+   * The drums that move on this beat: all of them, or with rowByRow, one row's. A drum still
+   * clearing takes its turn with what it clears with (a whole card clears in one turn, before
+   * it fills a row at a time); once released, with its own row.
+   */
   private moving(): [FlapMover, Place][] {
     const all = [...this.movers];
     if (!this.rowByRow) return all;
-    if (this.currentRow === null || !all.some(([, p]) => p.row === this.currentRow)) {
-      this.currentRow = all.length ? Math.min(...all.map(([, p]) => p.row)) : null;
+    const turn = ([m, p]: [FlapMover, Place]) => (m.clearing ? p.clear : p.row);
+    if (this.currentRow === null || !all.some((e) => turn(e) === this.currentRow)) {
+      this.currentRow = all.length ? Math.min(...all.map(turn)) : null;
     }
-    return all.filter(([, p]) => p.row === this.currentRow);
+    return all.filter((e) => turn(e) === this.currentRow);
   }
 
   private tick = (): void => {
@@ -140,13 +150,13 @@ export class FlapClock {
   };
 
   /**
-   * A row clearing before it changes goes on to its new characters only once every drum in it
-   * is on the blank: then they all set off together, on the next beat.
+   * A row (or card) clearing before it changes goes on to its new characters only once every
+   * drum in it is on the blank: then they all set off together, on the next beat.
    */
   private releaseClearRows(moving: [FlapMover, Place][]): void {
-    const rows = new Set(moving.map(([, p]) => p.row));
-    for (const row of rows) {
-      const inRow = [...this.movers].filter(([, p]) => p.row === row).map(([m]) => m);
+    const groups = new Set(moving.map(([, p]) => p.clear));
+    for (const group of groups) {
+      const inRow = [...this.movers].filter(([, p]) => p.clear === group).map(([m]) => m);
       if (inRow.some((m) => m.cleared) && inRow.every((m) => m.cleared || m.done)) {
         for (const m of inRow) if (m.cleared) m.release();
       }

@@ -24,6 +24,8 @@ export interface FlapMotionOptions {
   row?: number;
   /** The contents of its row, when rows clear before changing (see SplitFlapCell's rowKey). */
   rowKey?: string;
+  /** With a clock: what clears with it (see SplitFlapCell's clearGroup). Defaults to `row`. */
+  clearGroup?: number;
 }
 
 /**
@@ -42,7 +44,7 @@ export function useFlapMotion(
   target: string,
   nextOf: (face: string) => string,
   flipMs: number,
-  { clock, onFlap, tracker, startDelay = 0, row = 0, rowKey }: FlapMotionOptions = {}
+  { clock, onFlap, tracker, startDelay = 0, row = 0, rowKey, clearGroup }: FlapMotionOptions = {}
 ): FlapMotion {
   const drumRef = useRef<Drum | null>(null);
   drumRef.current ??= new Drum(blank, nextOf);
@@ -62,6 +64,9 @@ export function useFlapMotion(
       else landed = d.step();
       redraw((n) => n + 1);
       return landed;
+    },
+    get clearing() {
+      return drumRef.current!.clearing;
     },
     get cleared() {
       return drumRef.current!.cleared;
@@ -86,7 +91,7 @@ export function useFlapMotion(
   // --- On the board's beat ---
   useEffect(() => {
     if (!clock || !moving) return;
-    if (!clock.has(mover)) clock.join(mover, { row, wait: startDelay });
+    if (!clock.has(mover)) clock.join(mover, { row, wait: startDelay, clear: clearGroup ?? row });
     // The clock lets go of drums that are done; a drum given somewhere new joins again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clock, moving, target, rowKey]);

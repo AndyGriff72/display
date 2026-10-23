@@ -40,6 +40,8 @@ export interface WholeValueFlapProps {
   row?: number;
   /** The contents of its row, when rows clear before changing (see SplitFlapCell). */
   rowKey?: string;
+  /** With a clock: what clears with it (see SplitFlapCell). Defaults to `row`. */
+  clearGroup?: number;
   /** How much it moves (see motion.ts): below "full", each flap snaps over rather than falling. */
   motion?: MotionLevel;
   style?: CSSProperties;
@@ -75,12 +77,13 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   startDelay = 0,
   row = 0,
   rowKey,
+  clearGroup,
   motion: motionLevel = "full",
   style,
 }: WholeValueFlapProps) {
   const target = faces[faceFor(value, faces, images)] ?? "";
   const nextOf = useCallback((face: string) => faces[(faceFor(face, faces, images) + 1) % faces.length] ?? "", [faces, images]);
-  const motion = useFlapMotion("", target, nextOf, flipMs, { clock, onFlap, tracker, startDelay, row, rowKey });
+  const motion = useFlapMotion("", target, nextOf, flipMs, { clock, onFlap, tracker, startDelay, row, rowKey, clearGroup });
 
   const padding = Math.round(cellWidth * 0.25);
   const sizes = useFittedSizes(images ? [] : faces, fontFamily, Math.round(cellHeight * 0.7), width - 2 * padding);

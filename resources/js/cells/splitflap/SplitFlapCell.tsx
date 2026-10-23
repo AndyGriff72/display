@@ -27,6 +27,8 @@ export interface SplitFlapCellProps extends CellProps {
    * cell goes round to the blank and waits for the rest of the row before going on.
    */
   rowKey?: string;
+  /** With a clock: what clears with it before a change (its row, or its whole card). Defaults to `row`. */
+  clearGroup?: number;
   /** The flaps' colour, instead of the usual near-black. Any CSS colour. */
   background?: string;
   /**
@@ -61,6 +63,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({
   startDelay = 0,
   row = 0,
   rowKey,
+  clearGroup,
   background,
   motion = "full",
   className,
@@ -82,7 +85,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useLayoutEffect(() => {
-    drum.current?.set({ target, stack, flipMs, clock, onFlap, tracker, startDelay, row, rowKey, motion });
+    drum.current?.set({ target, stack, flipMs, clock, onFlap, tracker, startDelay, row, rowKey, clearGroup, motion });
   });
 
   const vars = {
@@ -134,6 +137,7 @@ interface DrumSettings {
   startDelay?: number;
   row?: number;
   rowKey?: string;
+  clearGroup?: number;
   motion?: MotionLevel;
 }
 
@@ -223,13 +227,17 @@ class FlapDrum implements FlapMover {
     if (!this.drum.moving) return;
     const { clock } = this.settings;
     if (clock) {
-      if (!clock.has(this)) clock.join(this, { row: this.settings.row, wait: this.settings.startDelay });
+      if (!clock.has(this)) clock.join(this, { row: this.settings.row, wait: this.settings.startDelay, clear: this.settings.clearGroup ?? this.settings.row });
     } else if (this.timer === null) {
       this.ownTime();
     }
   }
 
   // --- FlapMover: what the board's clock asks of it on each beat ---
+
+  get clearing(): boolean {
+    return this.drum.clearing;
+  }
 
   get cleared(): boolean {
     return this.drum.cleared;
