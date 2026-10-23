@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CHARSETS } from "../charsets";
 import { flapIndex, flipsBetween, nextFlap, normalizeStack } from "./flapStack";
 
 const STACK = " ABC123";
@@ -50,5 +51,16 @@ describe("normalizeStack", () => {
 
   it("moves a blank from elsewhere to the front", () => {
     expect(normalizeStack("AB C")).toBe(" ABC");
+  });
+});
+
+describe("normalizeStack", () => {
+  it("gives a board saved with the old standard stack the flaps added since", () => {
+    expect(normalizeStack(" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:-/'()&!?")).toBe(CHARSETS.standard);
+    expect(normalizeStack("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:-/'()&!?")).toBe(CHARSETS.standard);
+  });
+
+  it("leaves a stack of the board's own as it is", () => {
+    expect(normalizeStack(" XYZ")).toBe(" XYZ");
   });
 });

@@ -21,5 +21,5 @@ outside licence to follow; its embedding setting allows use on web pages.
 
 Browsers load the WOFF2 (the same font, most compressed); the WOFF and TTF are fallbacks for older
 browsers.
-It has letters (both cases), digits and common punctuation, but no "&", although the standard
+It has letters (both cases), digits, common punctuation and "£", "$" and "%", but no "&", although the standard
 flap stack has one: a board showing "&" in Flapline takes it from the next font in line.

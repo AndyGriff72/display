@@ -6,8 +6,8 @@
  * The first character is the cell's resting state, so keep it a blank.
  */
 export const CHARSETS = {
-  /** Letters, digits and the punctuation a departures board needs. */
-  standard: " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:-/'()&!?",
+  /** Letters, digits and the punctuation a departures board needs, and prices and percentages. */
+  standard: " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:-/'\"()&!?£$%",
   /** Clocks and platform numbers: a short drum, so it settles fast. */
   numeric: " 0123456789:.-",
   /** Letters only. */
@@ -15,3 +15,11 @@ export const CHARSETS = {
 } as const;
 
 export type CharsetName = keyof typeof CHARSETS;
+
+/**
+ * Stacks the app once gave a name and has since added flaps to, and what they are now. Boards
+ * keep their stack as it was when saved, so without this they would go on without the new flaps.
+ */
+export const OLD_CHARSETS: Record<string, string> = {
+  " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:-/'()&!?": CHARSETS.standard,
+};

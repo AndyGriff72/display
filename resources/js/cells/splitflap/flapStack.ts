@@ -3,14 +3,18 @@
  * component so the rules can be tested without rendering anything.
  */
 
+import { OLD_CHARSETS } from "../charsets";
+
 /**
  * A stack with its blank flap first, where every cell starts and where anything the stack
  * cannot print ends up. A stack that has lost its blank (boards saved before the server stopped
  * trimming spaces from layouts lost theirs) gets one back, at the front; one with a blank
- * elsewhere has it moved there.
+ * elsewhere has it moved there. A named stack saved before it gained flaps gets them (see
+ * OLD_CHARSETS).
  */
 export function normalizeStack(stack: string): string {
-  return stack.startsWith(" ") ? stack : " " + stack.replaceAll(" ", "");
+  const blankFirst = stack.startsWith(" ") ? stack : " " + stack.replaceAll(" ", "");
+  return OLD_CHARSETS[blankFirst] ?? blankFirst;
 }
 
 /**

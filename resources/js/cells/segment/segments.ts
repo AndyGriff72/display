@@ -129,6 +129,8 @@ const FOURTEEN: Record<string, string[]> = {
   "?": ["a", "b", "g2", "l"],
   "!": ["i", "dp"],
   "&": ["a", "h", "j", "g1", "e", "d", "m"],
+  $: ["a", "f", "g1", "g2", "c", "d", "i", "l"],
+  "%": ["f", "c", "j", "k"],
 };
 
 /** Characters every segment display can show with its dots alone. */
