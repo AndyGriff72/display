@@ -495,7 +495,7 @@ const BEAT_MAX_SPREAD_MS = 25;
  * How far behind its beat each beat's sound plays, in seconds: enough that a timer the browser
  * ran late can still be put back exactly on the beat, so the rhythm stays steady.
  */
-const BEAT_LATENCY = 0.04;
+export const BEAT_LATENCY = 0.04;
 
 /** One variant of a synthesised click (see clickSynth.ts), ready to play. */
 function synthesiseClick(ctx: AudioContext, style: SynthStyle): AudioBuffer {

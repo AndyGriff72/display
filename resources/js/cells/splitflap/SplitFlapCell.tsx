@@ -1,8 +1,9 @@
 import { memo, useLayoutEffect, useRef, type CSSProperties } from "react";
+import { minimalStride, type MotionLevel } from "../../board/motion";
 import { CHARSETS } from "../charsets";
 import type { CellProps } from "../types";
 import type { FlapClock, MotionTracker } from "./flapClock";
-import { flapIndex, nextFlap, normalizeStack } from "./flapStack";
+import { flapIndex, flipsBetween, nextFlap, normalizeStack } from "./flapStack";
 import { Drum, type FlapMover } from "./drum";
 import "./SplitFlapCell.css";
 
@@ -28,11 +29,17 @@ export interface SplitFlapCellProps extends CellProps {
   rowKey?: string;
   /** The flaps' colour, instead of the usual near-black. Any CSS colour. */
   background?: string;
+  /**
+   * How much it moves (see motion.ts): "full", each flap falls; "lighter", each snaps over;
+   * "minimal", it snaps over in a few big jumps rather than through every flap.
+   */
+  motion?: MotionLevel;
 }
 
 /**
  * One split-flap character. It never jumps to a character: it flips forward through every
- * flap in its stack, one at a time, until it reaches the one it was asked for.
+ * flap in its stack, one at a time, until it reaches the one it was asked for (or, in minimal
+ * motion, through a few of them).
  *
  * A board can have hundreds of these, each landing a flap on every beat while it moves, so the
  * movement does not go through React: React draws the cell once, and each beat then changes
@@ -55,6 +62,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({
   row = 0,
   rowKey,
   background,
+  motion = "full",
   className,
   style,
 }: SplitFlapCellProps) {
@@ -74,7 +82,7 @@ export const SplitFlapCell = memo(function SplitFlapCell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useLayoutEffect(() => {
-    drum.current?.set({ target, stack, flipMs, clock, onFlap, tracker, startDelay, row, rowKey });
+    drum.current?.set({ target, stack, flipMs, clock, onFlap, tracker, startDelay, row, rowKey, motion });
   });
 
   const vars = {
@@ -126,6 +134,7 @@ interface DrumSettings {
   startDelay?: number;
   row?: number;
   rowKey?: string;
+  motion?: MotionLevel;
 }
 
 /**
@@ -152,6 +161,9 @@ class FlapDrum implements FlapMover {
   private falling: [Animation, Animation] | null = null;
   private fallingMs = 0;
   private pairShown = false;
+  /** In minimal motion: the target the jump size was worked out for, and the jump. */
+  private strideFor: string | null = null;
+  private stride = 1;
 
   constructor(root: HTMLElement, blank: string) {
     const glyph = (half: Element) => half.querySelector(".sf-glyph")!.appendChild(document.createTextNode(""));
@@ -168,7 +180,22 @@ class FlapDrum implements FlapMover {
     const old = this.settings;
     this.settings = settings;
     const { stack } = settings;
-    this.drum.nextOf = (c) => stack[nextFlap(Math.max(0, stack.indexOf(c)), stack)];
+    const at = (c: string) => Math.max(0, stack.indexOf(c));
+    if (settings.motion === "minimal") {
+      // A few big jumps to the target, each the same size, worked out when it is first set off for.
+      this.drum.nextOf = (c) => {
+        const left = flipsBetween(at(c), at(this.drum.target), stack);
+        if (left === 0) return stack[nextFlap(at(c), stack)];
+        if (this.strideFor !== this.drum.target) {
+          this.strideFor = this.drum.target;
+          this.stride = minimalStride(left);
+        }
+        return stack[(at(c) + Math.min(this.stride, left)) % stack.length];
+      };
+    } else {
+      this.drum.nextOf = (c) => stack[nextFlap(at(c), stack)];
+    }
+    if (old.motion !== settings.motion) this.draw();
     // The row's contents changed, and rows clear first: go round to the blank, then on.
     const clearFirst = settings.rowKey !== undefined && this.rowKey !== undefined && settings.rowKey !== this.rowKey;
     this.rowKey = settings.rowKey;
@@ -258,10 +285,12 @@ class FlapDrum implements FlapMover {
 
   /**
    * Show the drum as it is: the face showing and, while a flap falls, the next one behind it,
-   * the fall starting again from the top for every flap.
+   * the fall starting again from the top for every flap. With less motion, flaps do not fall:
+   * the face showing just changes as each lands.
    */
   private draw(): void {
-    const { shown, flipping } = this.drum;
+    const { shown } = this.drum;
+    const flipping = this.drum.flipping && (this.settings.motion ?? "full") === "full";
     const next = flipping ? this.drum.nextOf(shown) : shown;
     this.write(0, next);
     this.write(1, shown);

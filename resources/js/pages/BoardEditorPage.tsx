@@ -21,6 +21,7 @@ import {
 } from "../board/layout";
 import { useBoardData } from "../board/useBoardData";
 import { usePaging } from "../board/usePaging";
+import { MOTION_SETTINGS, type MotionSetting } from "../board/motion";
 import { CHARSETS, type CharsetName } from "../cells/charsets";
 import { normalizeStack } from "../cells/splitflap/flapStack";
 import { FONTS, loadFont } from "../fonts";
@@ -122,6 +123,8 @@ export default function BoardEditorPage() {
   const [printOut, setPrintOut] = useState(false);
   const [printMs, setPrintMs] = useState(DEFAULT_PRINT_MS);
   const [printRows, setPrintRows] = useState<"together" | "inTurn">("together");
+  // How much the board moves (see motion.ts).
+  const [motionSetting, setMotionSetting] = useState<MotionSetting>("auto");
   const [fontId, setFontId] = useState(FONTS[0].id);
   const [stackName, setStackName] = useState<CharsetName>("standard");
   // Saved with the board: whether it makes the flap sound, here and on screens.
@@ -216,6 +219,7 @@ export default function BoardEditorPage() {
         ...(rowsInTurn ? { rowsInTurn, ...(turnBy !== "row" ? { turnBy } : {}) } : rowDelay > 0 ? { rowDelay } : {}),
         ...(clearRows ? { clearRows } : {}),
         ...(printOut ? { printOut, ...(printMs !== DEFAULT_PRINT_MS ? { printMs } : {}), ...(printRows !== "together" ? { printRows } : {}) } : {}),
+        ...(motionSetting !== "auto" ? { motion: motionSetting } : {}),
         segments,
         ...(finish !== "led" ? { finish } : {}),
         ...(cellType === "text"
@@ -231,7 +235,7 @@ export default function BoardEditorPage() {
           : {}),
       },
     }),
-    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, rowsInTurn, turnBy, clearRows, printOut, printMs, printRows, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
+    [shape, cellType, cellWidth, cellHeight, gapX, gapY, colour, font, stackName, flipMs, flapTiming, rowDelay, rowsInTurn, turnBy, clearRows, printOut, printMs, printRows, motionSetting, segments, finish, textSize, textBackground, letterSpacing, lineHeight, textStyle]
   );
   const layoutErrors = useMemo(() => validateLayout(layout), [layout]);
 
@@ -272,6 +276,7 @@ export default function BoardEditorPage() {
     setPrintOut(cell.printOut === true);
     setPrintMs(cell.printMs ?? DEFAULT_PRINT_MS);
     setPrintRows(cell.printRows ?? "together");
+    setMotionSetting(cell.motion ?? "auto");
     setFontId(FONTS.find((f) => f.family === cell.fontFamily)?.id ?? FONTS[0].id);
     setStackName(
       (Object.keys(CHARSETS) as CharsetName[]).find((k) => cell.stack !== undefined && CHARSETS[k] === normalizeStack(cell.stack)) ??
@@ -692,6 +697,16 @@ export default function BoardEditorPage() {
                       </label>
                     </>
                   )}
+                  <label title="Slower devices can show changes with less animation, so they keep up and the sound stays with the picture">
+                    Motion
+                    <select value={motionSetting} onChange={(e) => setMotionSetting(e.target.value as MotionSetting)}>
+                      {MOTION_SETTINGS.map((m) => (
+                        <option key={m} value={m}>
+                          {MOTION_LABELS[m]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="check" title="Positions outside every field, list and static area, including gaps between list columns">
                     <input type="checkbox" checked={shape.unusedCells === "blank"} onChange={(e) => setShapeKey("unusedCells", e.target.checked ? "blank" : undefined)} />
                     Blank cells in unused positions
@@ -912,6 +927,13 @@ function DataStatus({ data, name, missing }: { data: ReturnType<typeof useBoardD
 }
 
 /** Whether a board has lit cells (dot matrix or segments) anywhere: its own, or an area's. */
+const MOTION_LABELS: Record<MotionSetting, string> = {
+  auto: "Automatic: as much as the device keeps up with",
+  full: "Full",
+  lighter: "Lighter: flaps snap over, no printing or fading",
+  minimal: "Minimal: as lighter, and flaps skip ahead",
+};
+
 function usesLitCells(boardType: CellType, shape: LayoutShape): boolean {
   const lit = (t?: string) => t === "dotmatrix" || t === "segment";
   if (lit(boardType)) return true;

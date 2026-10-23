@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { BEAT_LATENCY } from "../audio/flapSound";
 import { enableBeatTiming } from "../cells/splitflap/beatTiming";
 import { DEFAULT_PRINT_MS, PrintedCell, printPlan } from "../cells/printing";
 import { FlapClock, MotionTracker } from "../cells/splitflap/flapClock";
@@ -26,6 +27,7 @@ import {
 } from "./compose";
 import { parseArea, type BoardLayout, type Rect, type StaticArea } from "./layout";
 import { IMAGE_REFERRER } from "./images";
+import { motionGovernor, RenderLag, settingFromAddress } from "./motion";
 import { TimingReadout } from "./TimingReadout";
 import "./Board.css";
 
@@ -81,17 +83,28 @@ export function Board({ layout: given, values: givenValues, records = [], page =
   const drums = useDrums(flaps);
   // Every split-flap on the board: what a beat's flaps are measured against.
   const splitFlaps = useMemo(() => [...specs.values()].filter((s) => s.type === "splitflap").length + flaps.length, [specs, flaps]);
+  // How much the board moves (see motion.ts): as set, or on "auto" as much as this device keeps up with.
+  const motionSetting = settingFromAddress(cell.motion);
+  const autoMotion = useSyncExternalStore(motionGovernor.subscribe, motionGovernor.getLevel);
+  const motion = motionSetting === "auto" ? autoMotion : motionSetting;
   const onSettledRef = useRef(onSettled);
   onSettledRef.current = onSettled;
+  // A change is over: the motion level is judged on it, then whoever is waiting is told.
+  const settled = () => {
+    motionGovernor.end();
+    onSettledRef.current?.();
+  };
   // Drums keeping their own time (no clock) say when they move, so the board still knows when a
   // change is over.
   const trackerRef = useRef<MotionTracker | null>(null);
   trackerRef.current ??= new MotionTracker(() => {
-    if (!clocks.busy()) onSettledRef.current?.();
+    if (!clocks.busy()) settledRef.current();
   });
   const tracker = trackerRef.current;
+  const settledRef = useRef(settled);
+  settledRef.current = settled;
   const clocks = useFlapClocks(layout.cell.flapTiming !== "independent", onBeat, splitFlaps, () => {
-    if (!tracker.busy) onSettledRef.current?.();
+    if (!tracker.busy) settledRef.current();
   });
   const clockFor = clocks.clockFor;
   // How rows take their turn (see CellSettings): each a number of beats after the row above,
@@ -111,14 +124,22 @@ export function Board({ layout: given, values: givenValues, records = [], page =
   // A new page or layout: settled at once if nothing moves, or else when the last flap stops.
   // Cells join their clocks in their own (earlier-running) effects, so by now the board knows.
   useEffect(() => {
-    if (!clocks.busy() && !tracker.busy) onSettledRef.current?.();
+    if (!clocks.busy() && !tracker.busy) settled();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, given]);
+  // Anything set moving by this drawing: watch how the device copes until it stops (see motion.ts).
+  useEffect(() => {
+    if (clocks.busy() || tracker.busy) motionGovernor.begin(motionSetting === "auto");
+  });
+  // Flip-dot clicks wait for the drawing as the beats' sound does (see RenderLag).
+  const onDotFlipsRef = useRef(onDotFlips);
+  onDotFlipsRef.current = onDotFlips;
+  const dotFlips = useCallback((delays: number[]) => onDotFlipsRef.current?.(delays.map((d) => d + renderLag.extraMs)), []);
   const images = useMemo(() => imageAreas(layout, values, records, page), [layout, values, records, page]);
 
   // Lit cells printing their characters one at a time (see printing.tsx): each row's printing
   // cells left to right, which rows have just changed, and when each cell prints.
-  const printing = layout.cell.printOut === true;
+  const printing = layout.cell.printOut === true && motion === "full";
   const printMs = layout.cell.printMs ?? DEFAULT_PRINT_MS;
   const printedRows = useMemo(() => {
     if (!printing) return null;
@@ -204,13 +225,13 @@ export function Board({ layout: given, values: givenValues, records = [], page =
         switch (spec.type) {
           case "dotmatrix":
             if (printSteps) return <PrintedCell key={key} kind="dotmatrix" {...common} finish={spec.finish} step={printSteps.get(key)} printMs={printMs} tracker={tracker} />;
-            return <DotMatrixCell key={key} {...common} finish={spec.finish} />;
+            return <DotMatrixCell key={key} {...common} finish={spec.finish} fade={motion === "full"} />;
           case "segment":
             if (printSteps)
               return <PrintedCell key={key} kind="segment" {...common} segments={spec.segments} finish={spec.finish} step={printSteps.get(key)} printMs={printMs} tracker={tracker} />;
             return <SegmentCell key={key} {...common} segments={spec.segments} finish={spec.finish} />;
           case "flipdot":
-            return <FlipDotCell key={key} {...common} background={spec.background} sweepIndex={x} onFlip={onDotFlips} tracker={tracker} />;
+            return <FlipDotCell key={key} {...common} background={spec.background} sweepIndex={x} onFlip={onDotFlips && dotFlips} tracker={tracker} sweep={motion === "full"} />;
           default:
             return (
               <SplitFlapCell
@@ -226,6 +247,7 @@ export function Board({ layout: given, values: givenValues, records = [], page =
                 rowKey={rowKeys?.get(groupOf(x, y))}
                 background={spec.background}
                 onFlap={onFlap}
+                motion={motion}
               />
             );
         }
@@ -255,6 +277,7 @@ export function Board({ layout: given, values: givenValues, records = [], page =
             images={f.image}
             fit={f.fit}
             onFlap={onFlap}
+            motion={motion}
             style={gridArea(f.rect)}
           />
         );
@@ -283,7 +306,7 @@ export function Board({ layout: given, values: givenValues, records = [], page =
           {showAreas && <span className="board-area-label">{s.id}</span>}
         </div>
       ))}
-      {showTiming && <TimingReadout />}
+      {showTiming && <TimingReadout motion={motion} setting={motionSetting} />}
       {fields.map(({ id, rect }) => (
         <div key={id} className="board-field-outline" style={gridArea(rect)}>
           <span className="board-area-label">{id}</span>
@@ -326,7 +349,11 @@ function useFlapClocks(
     if (!clock) {
       clock = new FlapClock(
         flipMs,
-        (landed, dueAt) => onBeatRef.current?.(landed, dueAt, splitFlapsRef.current),
+        (landed, dueAt) => {
+          // How the device is keeping up (see motion.ts), and the sound put where the picture is.
+          renderLag.note(dueAt, (lag) => motionGovernor.shown(lag, flipMs));
+          onBeatRef.current?.(landed, dueAt + renderLag.extraMs, splitFlapsRef.current);
+        },
         () => {
           if (!busy()) onAllIdleRef.current();
         }
@@ -360,6 +387,9 @@ function groupContents(cells: Map<string, string>, flaps: Flap[], groupOf: (x: n
 
 /** As SplitFlapCell's own default. */
 const DEFAULT_FLIP_MS = 80;
+
+/** How far behind its beat the drawing reaches the screen, beyond what the sound allows for already. */
+const renderLag = new RenderLag(BEAT_LATENCY * 1000);
 
 /**
  * The faces on each whole-value drum, by drum. A drum only ever gains faces while the board is

@@ -103,12 +103,12 @@ export class DotMatrixPainter {
     });
   }
 
-  /** Show `char` (and draw everything again if the look has changed). */
-  show(char: string, look: DotMatrixLook): void {
+  /** Show `char` (and draw everything again if the look has changed); bulbs fade, unless not to. */
+  show(char: string, look: DotMatrixLook, fade = true): void {
     const changedLook = look.width !== this.look.width || look.height !== this.look.height || look.color !== this.look.color || look.finish !== this.look.finish;
     this.look = look;
     this.lit = dotGlyph(char).flatMap((row) => [...row].map((d) => d === "#"));
-    if (look.finish === "bulb" && !changedLook && this.ratio !== 0 && typeof document !== "undefined" && !document.hidden) {
+    if (fade && look.finish === "bulb" && !changedLook && this.ratio !== 0 && typeof document !== "undefined" && !document.hidden) {
       this.crossfade();
       return;
     }

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { recentChanges, subscribeBeatTiming, timingSummary, type ChangeTiming, type TimingSummary } from "../cells/splitflap/beatTiming";
+import { motionGovernor, type MotionLevel, type MotionSetting } from "./motion";
 import "./TimingReadout.css";
 
 /**
@@ -10,7 +11,7 @@ import "./TimingReadout.css";
  * Drawn on the page itself (a portal), not inside the board, so a screen's scaling of the board
  * does not shrink or move it.
  */
-export function TimingReadout() {
+export function TimingReadout({ motion, setting }: { motion: MotionLevel; setting: MotionSetting }) {
   // A new array each time, so the store's snapshot changes whenever a change does.
   const { changes, summary } = useSyncExternalStore(subscribeBeatTiming, snapshot);
   return createPortal(
@@ -18,6 +19,7 @@ export function TimingReadout() {
       <div className="timing-title">
         Split-flap timing (beats should be {changes[0]?.periodMs ?? 80} ms apart)
       </div>
+      <Motion motion={motion} setting={setting} />
       <Summary s={summary} />
       {changes.length === 0 && <div>Waiting for a change…</div>}
       {changes.map((c) => (
@@ -35,6 +37,26 @@ subscribeBeatTiming(() => version++);
 function snapshot(): Snapshot {
   if (cached.version !== version) cached = { version, value: { changes: recentChanges().map((c) => ({ ...c })), summary: { ...timingSummary() } } };
   return cached.value;
+}
+
+/** The motion level in use (see motion.ts), and why the last few changes of it happened. */
+function Motion({ motion, setting }: { motion: MotionLevel; setting: MotionSetting }) {
+  useSyncExternalStore(motionGovernor.subscribe, () => motionGovernor.version);
+  const how = setting === "auto" ? "automatic" : "fixed by the board or the address";
+  const verdict = { behind: "could not keep up", easy: "kept up easily", fine: "kept up", unknown: "too short to judge" }[motionGovernor.lastVerdict];
+  return (
+    <div className="timing-summary">
+      <div>
+        <strong>Motion: {motion}</strong> ({how}) · last change {verdict}
+      </div>
+      {motionGovernor.lastFigures && <div>{motionGovernor.lastFigures}</div>}
+      {motionGovernor.history.map((e) => (
+        <div key={e.at}>
+          {new Date(e.at).toLocaleTimeString()}: {e.from} to {e.to}, {e.why}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** Every big change since the page opened: the steady figures to read off a screen. */

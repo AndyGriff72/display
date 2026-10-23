@@ -75,9 +75,10 @@ export class FlipDotPainter {
   /**
    * Turn the discs that differ to show `target`, sweeping across from left to right. A turn
    * still under way finishes at once first. Returns the delay (ms) of each column that turns,
-   * for the sound, or an empty list if nothing changes.
+   * for the sound, or an empty list if nothing changes. Without `sweep` (less motion), the discs
+   * that differ just show their new sides, all at once.
    */
-  show(target: boolean[]): number[] {
+  show(target: boolean[], sweep = true): number[] {
     if (this.turn) this.finish();
     const changed = target.map((on, i) => on !== this.lit[i]);
     if (!changed.some(Boolean)) return [];
@@ -86,6 +87,13 @@ export class FlipDotPainter {
       this.lit = target;
       this.paintAll();
       return [];
+    }
+    if (!sweep) {
+      this.lit = target;
+      this.paintAll();
+      const columns = new Set<number>();
+      changed.forEach((c, i) => c && columns.add(i % DOT_COLUMNS));
+      return [...columns].map(() => 0);
     }
     this.turn = { start: performance.now(), from: this.lit, to: target, done: changed.map((c) => !c) };
     this.lit = target;

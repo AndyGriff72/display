@@ -9,6 +9,7 @@
 
 import type { SoundStyle } from "../audio/flapSound";
 import type { Finish } from "../cells/types";
+import { MOTION_SETTINGS, type MotionSetting } from "./motion";
 
 export type { Finish };
 
@@ -150,6 +151,11 @@ export interface CellSettings extends TextStyle {
   printMs?: number;
   /** With printOut: "together" (the default), changing rows print at once; "inTurn", one after another. */
   printRows?: "together" | "inTurn";
+  /**
+   * How much the board moves (see motion.ts): "auto" (the default) as much as the device can
+   * keep up with, or always "full", "lighter" or "minimal". An address's ?motion= overrides it.
+   */
+  motion?: MotionSetting;
   /** Segment: 7 for digits, 14 for text. */
   segments?: 7 | 14;
   /** Dot matrix and segment: LED (the default), VFD, or lightbulbs (dot matrix only). */
@@ -433,6 +439,9 @@ export function validateLayout(layout: BoardLayout): string[] {
   }
   for (const key of ["rowsInTurn", "clearRows", "printOut"] as const) {
     if (cell?.[key] !== undefined && typeof cell[key] !== "boolean") errors.push(`The board's cells: ${key} must be true or false, without quotes.`);
+  }
+  if (cell?.motion !== undefined && !MOTION_SETTINGS.includes(cell.motion)) {
+    errors.push(`The board's cells: motion must be one of ${MOTION_SETTINGS.map((m) => `"${m}"`).join(", ")}.`);
   }
   if (cell?.flapTiming !== undefined && !FLAP_TIMINGS.includes(cell.flapTiming)) {
     errors.push(`The board's cells: flapTiming must be one of ${FLAP_TIMINGS.map((t) => `"${t}"`).join(", ")}.`);

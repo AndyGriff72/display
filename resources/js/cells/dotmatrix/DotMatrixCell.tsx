@@ -6,6 +6,8 @@ import "../lit.css";
 export interface DotMatrixCellProps extends CellProps {
   /** LED (the default), VFD or lightbulbs. */
   finish?: Finish;
+  /** Lightbulbs fade from one character to the next (the default), or switch at once (less motion). */
+  fade?: boolean;
 }
 
 /** As lit.css's default colour, for a cell given none. */
@@ -24,6 +26,7 @@ export const DotMatrixCell = memo(function DotMatrixCell({
   height,
   color = DEFAULT_COLOUR,
   finish = "led",
+  fade = true,
   className,
   style,
 }: DotMatrixCellProps) {
@@ -43,7 +46,7 @@ export const DotMatrixCell = memo(function DotMatrixCell({
   }, []);
 
   useLayoutEffect(() => {
-    painter.current?.show(char, look);
+    painter.current?.show(char, look, fade);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [char, width, height, color, finish]);
 

@@ -16,6 +16,8 @@ export interface FlipDotCellProps extends CellProps {
   onFlip?: (delaysMs: number[]) => void;
   /** Told when the cell starts and stops turning, so the board knows when it is still. */
   tracker?: MotionTracker;
+  /** Discs turn sweeping across the board (the default), or all at once (less motion). */
+  sweep?: boolean;
 }
 
 function litDots(char: string): boolean[] {
@@ -40,6 +42,7 @@ export const FlipDotCell = memo(function FlipDotCell({
   sweepIndex = 0,
   onFlip,
   tracker,
+  sweep = true,
   className,
   style,
 }: FlipDotCellProps) {
@@ -70,7 +73,7 @@ export const FlipDotCell = memo(function FlipDotCell({
   }, [width, height, color, background, sweepIndex]);
 
   useLayoutEffect(() => {
-    const delays = painter.current?.show(target) ?? [];
+    const delays = painter.current?.show(target, sweep) ?? [];
     if (delays.length) onFlipRef.current?.(delays);
   }, [target]);
 

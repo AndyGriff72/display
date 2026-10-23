@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { faceFor } from "../../board/compose";
 import { IMAGE_REFERRER } from "../../board/images";
+import type { MotionLevel } from "../../board/motion";
 import type { FlapClock, MotionTracker } from "./flapClock";
 import { flapShades } from "./SplitFlapCell";
 import { useFlapMotion } from "./useFlapMotion";
@@ -39,6 +40,8 @@ export interface WholeValueFlapProps {
   row?: number;
   /** The contents of its row, when rows clear before changing (see SplitFlapCell). */
   rowKey?: string;
+  /** How much it moves (see motion.ts): below "full", each flap snaps over rather than falling. */
+  motion?: MotionLevel;
   style?: CSSProperties;
 }
 
@@ -72,6 +75,7 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   startDelay = 0,
   row = 0,
   rowKey,
+  motion: motionLevel = "full",
   style,
 }: WholeValueFlapProps) {
   const target = faces[faceFor(value, faces, images)] ?? "";
@@ -81,7 +85,7 @@ export const WholeValueFlap = memo(function WholeValueFlap({
   const padding = Math.round(cellWidth * 0.25);
   const sizes = useFittedSizes(images ? [] : faces, fontFamily, Math.round(cellHeight * 0.7), width - 2 * padding);
   const current = faces[faceFor(motion.shown, faces, images)] ?? "";
-  const flipping = motion.flipping;
+  const flipping = motion.flipping && motionLevel === "full";
   const coming = flipping ? motion.next : current;
   const glyph = (face: string): CSSProperties =>
     images ? { padding: Math.round(cellHeight * 0.08) } : { fontSize: sizes.get(face), textAlign: align, padding: `0 ${padding}px` };
