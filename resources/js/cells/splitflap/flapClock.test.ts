@@ -151,23 +151,29 @@ describe("FlapClock", () => {
     expect(row.every((d) => d.done)).toBe(true);
   });
 
-  it("clearing a whole card row by row, clears all its rows in one turn, then fills them a row at a time, then the next card", () => {
-    // Card 1 is rows 0 and 1; card 2 is rows 2 and 3. Each row is one drum, starting on "B".
+  it("clearing a whole card row by row, clears it a row at a time, then fills it a row at a time, then the next card", () => {
+    // Card 1 is rows 0 and 1; card 2 is rows 2 and 3. Each row is one drum, starting on "B",
+    // which is ten beats from the blank.
     const rows = ["C", "D", "E", "F"].map((to) => drum(to, "B", true));
     board(
       rows.map((d, y) => ({ d, row: y * 1000, clear: y < 2 ? 0 : 2000 })),
       true
     );
-    // Card 1's rows go round to the blank together; card 2 has not started.
+    // Row 0 clears first, then waits on the blank while row 1 clears; card 2 has not started.
     vi.advanceTimersByTime(80 * 10);
-    expect(rows[0]).toMatchObject({ shown: " " });
-    expect(rows[1]).toMatchObject({ shown: " " });
-    expect(rows[2].shown).toBe("B");
-    // Released together, then row 0 fills before row 1 starts.
-    vi.advanceTimersByTime(80 * 3);
-    expect(rows[0].clearing).toBe(false);
+    expect(rows[0]).toMatchObject({ shown: " ", cleared: true });
+    expect(rows.slice(1).map((d) => d.shown)).toEqual(["B", "B", "B"]);
+    vi.advanceTimersByTime(80 * 10);
     expect(rows[1].shown).toBe(" ");
-    vi.advanceTimersByTime(80 * 30);
+    expect(rows[2].shown).toBe("B");
+    // The card is clear: row 0 fills first (four beats to "C"), while row 1 waits on the blank.
+    vi.advanceTimersByTime(80 * 4);
+    expect(rows[0].shown).toBe("C");
+    expect(rows[1].shown).toBe(" ");
+    vi.advanceTimersByTime(80 * 5);
+    expect(rows[1].shown).toBe("D");
+    expect(rows[2].shown).toBe("B");
+    vi.advanceTimersByTime(80 * 40);
     expect(rows.map((d) => d.shown)).toEqual(["C", "D", "E", "F"]);
   });
 });

@@ -12,7 +12,8 @@
  * wait until the row above has finished. And when a row clears before changing, its drums
  * each go round to the blank and wait there, released together once the whole row is clear.
  * What clears together can be bigger than what takes its turn: a whole card of a card list can
- * clear, and then fill a row at a time.
+ * clear a row at a time, each row waiting on the blank for the rest, and then fill a row at a
+ * time from the top.
  *
  * Browsers run timers late when the page is busy, so beats are counted from when the clock
  * started rather than from the last one: a late beat never pushes the rest later. Each beat
@@ -104,18 +105,17 @@ export class FlapClock {
   }
 
   /**
-   * The drums that move on this beat: all of them, or with rowByRow, one row's. A drum still
-   * clearing takes its turn with what it clears with (a whole card clears in one turn, before
-   * it fills a row at a time); once released, with its own row.
+   * The drums that move on this beat: all of them, or with rowByRow, one row's. A drum on the
+   * blank, waiting for the rest of its card to clear, has had its turn: the next row takes over.
    */
   private moving(): [FlapMover, Place][] {
     const all = [...this.movers];
     if (!this.rowByRow) return all;
-    const turn = ([m, p]: [FlapMover, Place]) => (m.clearing ? p.clear : p.row);
-    if (this.currentRow === null || !all.some((e) => turn(e) === this.currentRow)) {
-      this.currentRow = all.length ? Math.min(...all.map(turn)) : null;
+    const turnable = all.filter(([m]) => !m.cleared);
+    if (this.currentRow === null || !turnable.some(([, p]) => p.row === this.currentRow)) {
+      this.currentRow = turnable.length ? Math.min(...turnable.map(([, p]) => p.row)) : null;
     }
-    return all.filter((e) => turn(e) === this.currentRow);
+    return turnable.filter(([, p]) => p.row === this.currentRow);
   }
 
   private tick = (): void => {
@@ -129,7 +129,7 @@ export class FlapClock {
       if (place.wait > 0) place.wait--;
       else if (mover.step()) landed++;
     }
-    this.releaseClearRows(moving);
+    this.releaseClearRows();
     for (const [mover] of moving) if (mover.done) this.movers.delete(mover);
     const t1 = performance.now();
     if (landed > 0) this.onBeat(landed, dueAt);
@@ -151,14 +151,17 @@ export class FlapClock {
 
   /**
    * A row (or card) clearing before it changes goes on to its new characters only once every
-   * drum in it is on the blank: then they all set off together, on the next beat.
+   * drum in it is on the blank: then they all set off, on the next beat (row by row, from the
+   * top row waiting again).
    */
-  private releaseClearRows(moving: [FlapMover, Place][]): void {
-    const groups = new Set(moving.map(([, p]) => p.clear));
+  private releaseClearRows(): void {
+    const all = [...this.movers];
+    const groups = new Set(all.filter(([m]) => m.cleared).map(([, p]) => p.clear));
     for (const group of groups) {
-      const inRow = [...this.movers].filter(([, p]) => p.clear === group).map(([m]) => m);
-      if (inRow.some((m) => m.cleared) && inRow.every((m) => m.cleared || m.done)) {
-        for (const m of inRow) if (m.cleared) m.release();
+      const inGroup = all.filter(([, p]) => p.clear === group).map(([m]) => m);
+      if (inGroup.every((m) => m.cleared || m.done)) {
+        for (const m of inGroup) if (m.cleared) m.release();
+        this.currentRow = null;
       }
     }
   }

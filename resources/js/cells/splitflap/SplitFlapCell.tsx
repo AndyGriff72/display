@@ -235,10 +235,6 @@ class FlapDrum implements FlapMover {
 
   // --- FlapMover: what the board's clock asks of it on each beat ---
 
-  get clearing(): boolean {
-    return this.drum.clearing;
-  }
-
   get cleared(): boolean {
     return this.drum.cleared;
   }

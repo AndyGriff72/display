@@ -8,8 +8,6 @@
 export interface FlapMover {
   /** One beat: a falling flap lands, or a drum on the wrong face starts falling. True if a flap landed. */
   step(): boolean;
-  /** Clearing before a change: going round to the blank, or waiting there. */
-  readonly clearing: boolean;
   /** Clearing before a change, and now on the blank: waiting for the rest of its row. */
   readonly cleared: boolean;
   /** Its row is clear: go on to the new face. */
@@ -56,10 +54,6 @@ export class Drum implements FlapMover {
 
   get atRest(): boolean {
     return !this.flipping && this.shown === this.target;
-  }
-
-  get clearing(): boolean {
-    return this.pending !== null;
   }
 
   get cleared(): boolean {

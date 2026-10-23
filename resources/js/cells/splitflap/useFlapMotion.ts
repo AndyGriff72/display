@@ -65,9 +65,6 @@ export function useFlapMotion(
       redraw((n) => n + 1);
       return landed;
     },
-    get clearing() {
-      return drumRef.current!.clearing;
-    },
     get cleared() {
       return drumRef.current!.cleared;
     },
